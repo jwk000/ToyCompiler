@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "ToyCompiler": {
+      "commandName": "Project",
+      "commandLineArgs": "test\\test-object.js",
+      "workingDirectory": "D:\\P4\\Test\\ToyCompiler\\ToyCompiler"
+    }
+  }
+}
