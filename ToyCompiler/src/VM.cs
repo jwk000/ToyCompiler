@@ -34,6 +34,9 @@ namespace ToyCompiler
         public const int LeaveScope = 22;
         public const int Next = 23;//迭代成功执行循环，失败跳出循环
         public const int Pop = 24;
+        public const int Load = 25;//从当前作用域加载一个变量
+        public const int Store = 26;//把一个变量写入当前作用域
+        public const int Assign = 27;//赋值
     }
 
     //记录用来跳转的标签
@@ -47,8 +50,10 @@ namespace ToyCompiler
     {
         public int OpCode;
         public int OpInt;
-        public double OpDouble;
+        public double OpDouble;//TODO 改成variant
         public string OpString;
+        public bool OpBool;
+        public Variant OpVar;
         public Instruction(int opCode)
         {
             OpCode = opCode;
@@ -77,7 +82,7 @@ namespace ToyCompiler
 
         public void Parse(StatList tree)
         {
-            tree.OnVisit(ctx.Code);
+            tree.OnVisit(ctx);
         }
 
         public void Exec()

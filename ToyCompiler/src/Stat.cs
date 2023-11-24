@@ -41,7 +41,7 @@ interface IStat
 {
     StatCtrl Exec(Scope scope);
     bool Parse(TokenReader tokenReader);
-    void OnVisit(List<Instruction> code);
+    void OnVisit(List<Instruction> code, Scope scope);
 }
 
 class StatList : IStat
@@ -62,11 +62,11 @@ class StatList : IStat
         return StatCtrl.None;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void OnVisit(List<Instruction> code, Scope scope)
     {
         foreach (var stat in mStatList)
         {
-            stat.OnVisit(code);
+            stat.OnVisit(code, scope);
         }
     }
 
@@ -123,24 +123,24 @@ class Stat : IStat
         return StatCtrl.None;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void OnVisit(List<Instruction> code, Scope scope)
     {
         switch (mStatType)
         {
             case StatType.StatCompound:
-                mCompundStat.OnVisit(code);break;
+                mCompundStat.OnVisit(code,scope);break;
             case StatType.StatExp:
-                mExpStat.OnVisit(code); break;
+                mExpStat.OnVisit(code, scope); break;
             case StatType.StatFor:
-                mForStat.OnVisit(code); break;
+                mForStat.OnVisit(code, scope); break;
             case StatType.StatIf:
-                 mIfStat.OnVisit(code); break;
+                 mIfStat.OnVisit(code, scope); break;
             case StatType.StatWhile:
-                 mWhileStat.OnVisit(code); break;
+                 mWhileStat.OnVisit(code, scope); break;
             case StatType.StatJump:
-                 mJumpStat.OnVisit(code); break;
+                 mJumpStat.OnVisit(code, scope); break;
             case StatType.StatFun:
-                 mFunStat.OnVisit(code); break;
+                 mFunStat.OnVisit(code, scope); break;
             default:
                 break;
         }
@@ -202,7 +202,7 @@ class ExpStat : IStat
         mExp?.Calc();
         return StatCtrl.None;
     }
-    public void OnVisit(List<Instruction> code)
+    public void OnVisit(List<Instruction> code, Scope scope)
     {
         mExp.OnVisit(code);
     }
@@ -239,12 +239,12 @@ class CompoundStat : IStat
         return StatCtrl.None;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void OnVisit(List<Instruction> code, Scope scope)
     {
         code.Add(new Instruction(OpCode.EnterScope));
         foreach(var stat in mStatList) 
         { 
-            stat.OnVisit(code);
+            stat.OnVisit(code, scope);
         }
         code.Add(new Instruction(OpCode.LeaveScope));
     }
@@ -306,16 +306,16 @@ class IfStat : IStat
         return StatCtrl.None;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void OnVisit(List<Instruction> code, Scope scope)
     {
         mCondExp.OnVisit(code);
         Instruction njump = new Instruction(OpCode.NJump);
         code.Add(njump);
-        mIfStat.OnVisit(code);
+        mIfStat.OnVisit(code, scope);
         njump.OpInt = code.Count; //妙
         if (mElseStat != null)
         {
-            mElseStat.OnVisit(code);
+            mElseStat.OnVisit(code, scope);
         }
     }
     public bool Parse(TokenReader tokenReader)
@@ -433,7 +433,7 @@ class ForStat : IStat
         Env.LocalScope = scope;
         return StatCtrl.None;
     }
-    public void OnVisit(List<Instruction> code)
+    public void OnVisit(List<Instruction> code, Scope scope)
     {
         code.Add(new Instruction(OpCode.EnterScope));
         if (mForStatType == ForStatType.LoopFor)
@@ -450,7 +450,7 @@ class ForStat : IStat
             }
             Instruction njump = new Instruction(OpCode.NJump);
             code.Add(njump);
-            mStat.OnVisit(code);
+            mStat.OnVisit(code, scope);
             mExp3?.OnVisit(code);
             code.Add(new Instruction(OpCode.Jump) { OpInt = label });
             njump.OpInt = code.Count;
@@ -464,7 +464,7 @@ class ForStat : IStat
             //迭代器添加的两个变量压栈
             code.Add(new Instruction(OpCode.Push) { OpString = mForinExp.mParams[0].desc });
             code.Add(new Instruction(OpCode.Push) { OpString = mForinExp.mParams[1].desc });
-            mStat.OnVisit(code);
+            mStat.OnVisit(code, scope);
             //迭代器添加的两个变量出栈
             code.Add(new Instruction(OpCode.Pop));
             code.Add(new Instruction(OpCode.Pop));
@@ -579,12 +579,12 @@ class WhileStat : IStat
         return StatCtrl.None;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void OnVisit(List<Instruction> code, Scope scope)
     {
         int label = code.Count;
         mCondExp.OnVisit(code);
         Instruction njump = new Instruction(OpCode.NJump);
-        mStat.OnVisit(code);
+        mStat.OnVisit(code, scope);
         code.Add(new Instruction(OpCode.Jump) { OpInt=label});
         njump.OpInt = code.Count;
     }
@@ -648,20 +648,21 @@ class JumpStat : IStat
         }
     }
     
-    public Instruction OnVisit(List<Instruction> code)
+    public void OnVisit(List<Instruction> code, Scope scope)
     {
         if (mToken.tokenType == TokenType.TTBreak)
         {
-            code.Add(new Instruction(OpCode.Jump));
+            JumpLabel label = Instruction.JumpLabels.Peek();
+            code.Add(new Instruction(OpCode.Jump) { OpInt = label.BreakLabel});
         }
         else if (mToken.tokenType == TokenType.TTContinue)
         {
-            code.Add(new Instruction(OpCode.Jump));
+            JumpLabel label = Instruction.JumpLabels.Peek();
+            code.Add(new Instruction(OpCode.Jump) { OpInt = label.ContinueLabel});
         }
         else if (mToken.tokenType == TokenType.TTReturn)
         {
-
-            code.Add(new Instruction(OpCode.Jump));
+            code.Add(new Instruction(OpCode.Jump) { OpInt = Instruction.ReturnLabel});
         }
 
     }
@@ -747,6 +748,24 @@ class FunStat : IStat
         mVariant.fun = this;
         scope.AddVariant(mVariant);
         return StatCtrl.None;
+    }
+
+    public void OnVisit(List<Instruction> code, Scope scope)
+    {
+        var mVariant = new Variant();
+        mVariant.variantType = VariantType.Function;
+        mVariant.id = mFunID.desc;
+        mVariant.label = code.Count;
+        //写入全局作用域
+        scope.AddVariant(mVariant);
+
+        //调用者负责装载参数
+        foreach(Token token in mParams)
+        {
+            code.Add(new Instruction(OpCode.Load) { OpString = token.desc });
+        }
+        mStat.OnVisit(code, scope);
+        //返回值在栈顶，return语句清栈后写入返回值
     }
 
     public bool Parse(TokenReader tokenReader)

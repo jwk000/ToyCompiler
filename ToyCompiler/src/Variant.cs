@@ -14,7 +14,8 @@ namespace ToyCompiler
         Boolean,
         Array,
         Object,
-        Function
+        Function,
+        Label
     }
 
     class Variant
@@ -27,6 +28,7 @@ namespace ToyCompiler
         public VArray arr;
         public VObject obj;
         public FunStat fun;
+        public int label;//vm跳转用的label
 
         public void Assign(Variant w)//赋值不包含id
         {
@@ -37,6 +39,7 @@ namespace ToyCompiler
             this.arr = w.arr;
             this.obj = w.obj;
             this.fun = w.fun;
+            this.label = w.label;
         }
 
         public override string ToString()
@@ -50,6 +53,7 @@ namespace ToyCompiler
                 VariantType.Array=>$"{arr}",
                 VariantType.Object=>$"{obj}",
                 VariantType.Function=>$"{fun}",
+                VariantType.Label =>$"{label}",
                 _ => $"NotVariant"
             };
         }
