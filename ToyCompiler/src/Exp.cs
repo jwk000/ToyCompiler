@@ -34,6 +34,7 @@ interface IExp
 {
     bool Parse(TokenReader reader);
     Variant Calc();
+    void OnVisit(List<Instruction> code);
 }
 
 class Exp : IExp
@@ -75,6 +76,13 @@ class Exp : IExp
         else
         {
             return assign.Calc();
+        }
+    }
+    public void OnVisit(List<Instruction> code)
+    {
+        if (decl != null)
+        {
+            decl.OnVisit(code);
         }
     }
 }
@@ -156,6 +164,10 @@ class AssignExp : IExp
         throw new Exception($"invalid assign op {op}");
     }
 
+    public void OnVisit(List<Instruction> code)
+    {
+        //TODO
+    }
 }
 
 class VarDeclExp : IExp
@@ -197,14 +209,20 @@ class VarDeclExp : IExp
         return v;
     }
 
-}
+    public void OnVisit(List<Instruction> code)
+    {
 
+    }
+
+}
+//for(var item in arr)
 class ForInExp : IExp
 {
-    public List<Token> mParams;
-    public Exp mExp;
-    public Variant mVar;
-    public object mIterator;
+    public List<Token> mParams;//in前面的参数
+    public Exp mExp;//in后面的表达式
+    public Variant mVar;//exp的计算结果
+    public object mIterator;//var的迭代器
+    public int mIndex=0;//数组下标
     public bool Parse(TokenReader reader)
     {
         Token t = reader.Next();
@@ -254,6 +272,11 @@ class ForInExp : IExp
         return v;
     }
 
+    public void OnVisit(List<Instruction> code)
+    {
+        mExp.OnVisit(code);
+    }
+
     public bool Next()
     {
         if (mVar.variantType == VariantType.Array)
@@ -261,10 +284,34 @@ class ForInExp : IExp
             IEnumerator<Variant> it = mIterator as IEnumerator<Variant>;
             if (it.MoveNext())
             {
+                //下标
                 var t = mParams[0];
-                it.Current.id = t.desc;
-                Env.LocalScope.AddVariant(it.Current);
+                Variant v = Env.LocalScope.GetVariant(t.desc);
+                if (v == null)
+                {
+                    v = new Variant();
+                    v.variantType = VariantType.Number;
+                    v.id = t.desc;
+                    Env.LocalScope.AddVariant(v);
+                }
+                v.num = mIndex++;
+               
+                //值
+                t = mParams[1];
+                v = Env.LocalScope.GetVariant(t.desc);
+                if (v == null)
+                {
+                    v = new Variant();
+                    v.id = t.desc;
+                    Env.LocalScope.AddVariant(v);
+                }
+                v.Assign(it.Current);
+
                 return true;
+            }
+            else
+            {
+                mIndex = 0;
             }
         }
         else if (mVar.variantType == VariantType.Object)
@@ -272,41 +319,36 @@ class ForInExp : IExp
             IEnumerator<KeyValuePair<string, Variant>> it = mIterator as IEnumerator<KeyValuePair<string, Variant>>;
             if(it.MoveNext())
             {
+                //key
                 var t = mParams[0];
                 Variant v = Env.LocalScope.GetVariant(t.desc);
                 if (v == null)
                 {
                     v = new Variant();
                     v.variantType = VariantType.String;
-                    v.str = it.Current.Key;
                     v.id = t.desc;
                     Env.LocalScope.AddVariant(v);
                 }
-                else
-                {
-                    v.str = it.Current.Key;
-                }
-
+                v.str = it.Current.Key;
+                
+                //值
                 t = mParams[1];
                 Variant u = Env.LocalScope.GetVariant(t.desc);
                 if (u == null)
                 {
-                    u = it.Current.Value;
+                    u = new Variant();
                     u.id = t.desc;
                     Env.LocalScope.AddVariant(u);
                 }
-                else
-                {
-                    u.Assign(it.Current.Value);
-                }
-
+                u.Assign(it.Current.Value);
+               
                 return true;
             }
         }
         return false;
     }
 
-    
+
 }
 class ConditionExp : IExp
 {
@@ -373,6 +415,11 @@ class ConditionExp : IExp
         }
         return v;
     }
+
+    public void OnVisit(List<Instruction> code)
+    {
+
+    }
 }
 
 class UnaryExp : IExp
@@ -418,6 +465,11 @@ class UnaryExp : IExp
             return false;
         }
         throw new Exception($"unary operator {op} not supported");
+    }
+
+    public void OnVisit(List<Instruction> code)
+    {
+
     }
 }
 
@@ -624,6 +676,11 @@ class PostfixExp : IExp
             throw new Exception($"invalid postifx type {p.postfixType}");
         }
     }
+
+    public void OnVisit(List<Instruction> code)
+    {
+        
+    }
 }
 
 
@@ -666,6 +723,11 @@ class OrExp : IExp
             return (bool)left.Calc() || (bool)right.Calc();
         }
     }
+
+    public void OnVisit(List<Instruction> code)
+    {
+
+    }
 }
 
 class AndExp : IExp
@@ -706,6 +768,23 @@ class AndExp : IExp
         else
         {
             return (bool)left.Calc() && (bool)right.Calc();
+        }
+    }
+
+    public void OnVisit(List<Instruction> code)
+    {
+        if (right == null)
+        {
+            left.OnVisit(code);
+        }
+        else
+        {
+            left.OnVisit(code);
+            right.OnVisit(code);
+            Instruction ins = new Instruction();
+            ins.OpCode = OpCode.Add;
+            ins.ParamNum = 0;
+            code.Add(ins);
         }
     }
 }
@@ -756,6 +835,26 @@ class EqualExp : IExp
             return left.Calc() != right.Calc();
         }
         throw new Exception($"equal not support {op}");
+    }
+
+    public void OnVisit(List<Instruction> code)
+    {
+        if (op == null)
+        {
+            left.OnVisit(code);
+        }
+        else if (op.tokenType == TokenType.TTEqual)
+        {
+            left.OnVisit(code); 
+            right.OnVisit(code);
+            Instruction ins = new Instruction();
+            ins.OpCode = OpCode.EQ;
+
+        }
+        else if (op.tokenType == TokenType.TTNotEqual)
+        {
+            left.Calc() != right.Calc();
+        }
     }
 }
 
@@ -814,6 +913,11 @@ class RelationExp : IExp
         }
         throw new Exception($"relation not suport {op}");
     }
+
+    public void OnVisit(List<Instruction> code)
+    {
+
+    }
 }
 
 class PlusExp : IExp
@@ -864,6 +968,11 @@ class PlusExp : IExp
             return left.Calc() - right.Calc();
         }
     }
+
+    public void OnVisit(List<Instruction> code)
+    {
+
+    }
 }
 
 class MulExp : IExp
@@ -912,6 +1021,11 @@ class MulExp : IExp
         {
             return left.Calc() / right.Calc();
         }
+    }
+
+    public void OnVisit(List<Instruction> code)
+    {
+
     }
 }
 
@@ -1034,6 +1148,11 @@ class PrimExp : IExp
             throw new Exception("invalid prim type!");
         }
     }
+
+    public void OnVisit(List<Instruction> code)
+    {
+
+    }
 }
 
 class ArrayExp : IExp
@@ -1089,6 +1208,11 @@ class ArrayExp : IExp
             }
         }
         return v;
+    }
+
+    public void OnVisit(List<Instruction> code)
+    {
+
     }
 }
 
@@ -1155,6 +1279,11 @@ class ObjectExp : IExp
             v.obj.Add(kv.Key, kv.Value.Calc());
         }
         return v;
+    }
+
+    public void OnVisit(List<Instruction> code)
+    {
+
     }
 }
 

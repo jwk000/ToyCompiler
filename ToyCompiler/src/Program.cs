@@ -25,14 +25,18 @@ namespace ToyCompiler
             Console.WriteLine("lexer parse success!");
             TokenReader tokenReader = new TokenReader(lexer.mTokenList);
 
-            StatList root = new StatList();
-            if (!root.Parse(tokenReader))
+            StatList tree = new StatList();
+            if (!tree.Parse(tokenReader))
             {
                 Console.WriteLine("stat parse failed!");
                 return;
             }
             Console.WriteLine("stat parse success!");
-            root.Exec(Env.GlobalScope);
+            //直接解释执行
+            tree.Exec(Env.GlobalScope);
+            //编译成指令执行
+            VM vm = new VM();
+            vm.Parse(tree);
             Console.WriteLine("press any key to exit...");
             Console.Read();
         }

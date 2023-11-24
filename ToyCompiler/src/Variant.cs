@@ -28,7 +28,7 @@ namespace ToyCompiler
         public VObject obj;
         public FunStat fun;
 
-        public void Assign(Variant w)
+        public void Assign(Variant w)//赋值不包含id
         {
             this.variantType = w.variantType;
             this.num = w.num;

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using static System.Formats.Asn1.AsnWriter;
 
 namespace ToyCompiler;
 
@@ -40,6 +41,7 @@ interface IStat
 {
     StatCtrl Exec(Scope scope);
     bool Parse(TokenReader tokenReader);
+    void OnVisit(List<Instruction> code);
 }
 
 class StatList : IStat
@@ -58,6 +60,14 @@ class StatList : IStat
             }
         }
         return StatCtrl.None;
+    }
+
+    public void OnVisit(List<Instruction> code)
+    {
+        foreach (var stat in mStatList)
+        {
+            stat.OnVisit(code);
+        }
     }
 
     public bool Parse(TokenReader tokenReader)
@@ -113,6 +123,28 @@ class Stat : IStat
         return StatCtrl.None;
     }
 
+    public void OnVisit(List<Instruction> code)
+    {
+        switch (mStatType)
+        {
+            case StatType.StatCompound:
+                mCompundStat.OnVisit(code);break;
+            case StatType.StatExp:
+                mExpStat.OnVisit(code); break;
+            case StatType.StatFor:
+                mForStat.OnVisit(code); break;
+            case StatType.StatIf:
+                 mIfStat.OnVisit(code); break;
+            case StatType.StatWhile:
+                 mWhileStat.OnVisit(code); break;
+            case StatType.StatJump:
+                 mJumpStat.OnVisit(code); break;
+            case StatType.StatFun:
+                 mFunStat.OnVisit(code); break;
+            default:
+                break;
+        }
+    }
     public bool Parse(TokenReader tokenReader)
     {
         Token t = tokenReader.Peek();
@@ -170,7 +202,10 @@ class ExpStat : IStat
         mExp?.Calc();
         return StatCtrl.None;
     }
-
+    public void OnVisit(List<Instruction> code)
+    {
+        mExp.OnVisit(code);
+    }
     public bool Parse(TokenReader tokenReader)
     {
         var expTokens = tokenReader.SeekNextToken(TokenType.TTSimicolon);
@@ -202,6 +237,16 @@ class CompoundStat : IStat
         }
         Env.LocalScope = scope;
         return StatCtrl.None;
+    }
+
+    public void OnVisit(List<Instruction> code)
+    {
+        code.Add(new Instruction(OpCode.EnterScope));
+        foreach(var stat in mStatList) 
+        { 
+            stat.OnVisit(code);
+        }
+        code.Add(new Instruction(OpCode.LeaveScope));
     }
 
     public bool Parse(TokenReader tokenReader)
@@ -261,6 +306,18 @@ class IfStat : IStat
         return StatCtrl.None;
     }
 
+    public void OnVisit(List<Instruction> code)
+    {
+        mCondExp.OnVisit(code);
+        Instruction njump = new Instruction(OpCode.NJump);
+        code.Add(njump);
+        mIfStat.OnVisit(code);
+        njump.OpInt = code.Count; //妙
+        if (mElseStat != null)
+        {
+            mElseStat.OnVisit(code);
+        }
+    }
     public bool Parse(TokenReader tokenReader)
     {
 
@@ -330,7 +387,6 @@ class ForStat : IStat
         Env.LocalScope = mScope;
         if (mForStatType == ForStatType.LoopFor)
         {
-
             for (mExp1?.Calc(); mExp2 == null ? true : mExp2.Calc() == true; mExp3?.Calc())
             {
                 var ctrl = mStat.Exec(mScope);
@@ -377,7 +433,49 @@ class ForStat : IStat
         Env.LocalScope = scope;
         return StatCtrl.None;
     }
-
+    public void OnVisit(List<Instruction> code)
+    {
+        code.Add(new Instruction(OpCode.EnterScope));
+        if (mForStatType == ForStatType.LoopFor)
+        {
+            mExp1?.OnVisit(code);
+            int label = code.Count;//条件判断
+            if (mExp2 == null)
+            {
+                code.Add(new Instruction(OpCode.Push) { OpInt = 1 }) ;
+            }
+            else
+            {
+                mExp2.OnVisit(code);
+            }
+            Instruction njump = new Instruction(OpCode.NJump);
+            code.Add(njump);
+            mStat.OnVisit(code);
+            mExp3?.OnVisit(code);
+            code.Add(new Instruction(OpCode.Jump) { OpInt = label });
+            njump.OpInt = code.Count;
+        }
+        else if (mForStatType == ForStatType.IterFor)
+        {
+            mForinExp.OnVisit(code);
+            int label = code.Count;
+            Instruction next = new Instruction(OpCode.Next);
+            code.Add(next);//需要保证栈顶是exp返回的对象或数组
+            //迭代器添加的两个变量压栈
+            code.Add(new Instruction(OpCode.Push) { OpString = mForinExp.mParams[0].desc });
+            code.Add(new Instruction(OpCode.Push) { OpString = mForinExp.mParams[1].desc });
+            mStat.OnVisit(code);
+            //迭代器添加的两个变量出栈
+            code.Add(new Instruction(OpCode.Pop));
+            code.Add(new Instruction(OpCode.Pop));
+            code.Add(new Instruction(OpCode.Jump) { OpInt=label});
+            next.OpInt = code.Count;//next完成后跳转到后面的指令
+            //清除exp返回值
+            code.Add(new Instruction(OpCode.Pop));
+        }
+            
+        code.Add(new Instruction(OpCode.LeaveScope));
+    }
     public bool Parse(TokenReader tokenReader)
     {
         TokenReader expReader = null;
@@ -481,6 +579,16 @@ class WhileStat : IStat
         return StatCtrl.None;
     }
 
+    public void OnVisit(List<Instruction> code)
+    {
+        int label = code.Count;
+        mCondExp.OnVisit(code);
+        Instruction njump = new Instruction(OpCode.NJump);
+        mStat.OnVisit(code);
+        code.Add(new Instruction(OpCode.Jump) { OpInt=label});
+        njump.OpInt = code.Count;
+    }
+
     public bool Parse(TokenReader tokenReader)
     {
         var t = tokenReader.Next();
@@ -513,6 +621,7 @@ class WhileStat : IStat
     }
 }
 
+//break continue break
 class JumpStat : IStat
 {
     public Token mToken;
@@ -537,6 +646,24 @@ class JumpStat : IStat
         {
             throw new Exception($"{mToken} is not valid jump stat!");
         }
+    }
+    
+    public Instruction OnVisit(List<Instruction> code)
+    {
+        if (mToken.tokenType == TokenType.TTBreak)
+        {
+            code.Add(new Instruction(OpCode.Jump));
+        }
+        else if (mToken.tokenType == TokenType.TTContinue)
+        {
+            code.Add(new Instruction(OpCode.Jump));
+        }
+        else if (mToken.tokenType == TokenType.TTReturn)
+        {
+
+            code.Add(new Instruction(OpCode.Jump));
+        }
+
     }
 
     public bool Parse(TokenReader tokenReader)
