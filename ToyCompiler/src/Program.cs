@@ -18,20 +18,22 @@ namespace ToyCompiler
 
             if (!lexer.ParseToken(script))
             {
+                Console.WriteLine("lexer parse failed!");
+                Console.WriteLine(lexer.ShowTokens());
                 return;
             }
-
-            //Console.WriteLine(lexer.ShowTokens());
+            Console.WriteLine("lexer parse success!");
             TokenReader tokenReader = new TokenReader(lexer.mTokenList);
 
             StatList root = new StatList();
             if (!root.Parse(tokenReader))
             {
+                Console.WriteLine("stat parse failed!");
                 return;
             }
-
+            Console.WriteLine("stat parse success!");
             root.Exec(Env.GlobalScope);
-
+            Console.WriteLine("press any key to exit...");
             Console.Read();
         }
     }

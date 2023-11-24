@@ -527,9 +527,13 @@ class PostfixExp : IExp
             t = reader.Peek();
             if (t != null)
             {
-                next = new PostfixExp();
-                next.first = false;
-                return next.Parse(reader);
+                var _next = new PostfixExp();
+                _next.first = false;
+                _next.Parse(reader);
+                if (_next.postfixType!= PostfixType.None)
+                {
+                    next = _next;
+                }
             }
 
         }
@@ -576,13 +580,13 @@ class PostfixExp : IExp
                 //参数压栈
                 foreach (var exp in p.args)
                 {
-                    Env.RunList.Add(exp.Calc());
+                    Env.RunStack.Add(exp.Calc());
                 }
                 stat.Call(Env.LocalScope);
-                if (Env.RunList.Count > 0)
+                if (Env.RunStack.Count > 0)
                 {
-                    v = Env.RunList[0];
-                    Env.RunList.Clear();
+                    v = Env.RunStack[0];
+                    Env.RunStack.Clear();
                     return v;
                 }
                 else
@@ -1015,7 +1019,6 @@ class PrimExp : IExp
         }
         else if (primType == PrimExpType.Exp)
         {
-
             return exp.Calc();
         }
         else if (primType == PrimExpType.Array)

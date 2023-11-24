@@ -45,26 +45,21 @@ interface IStat
 class StatList : IStat
 {
     public List<IStat> mStatList = new List<IStat>();
-    public Scope mScope = new Scope();
+
     public StatCtrl Exec(Scope scope)
     {
-        mScope.SetUpScope(scope);
-        Env.LocalScope = mScope;
+        Env.LocalScope = scope;
         foreach (var stat in mStatList)
         {
-            StatCtrl ctrl = stat.Exec(mScope);
+            StatCtrl ctrl = stat.Exec(scope);
             if (ctrl != StatCtrl.None)
             {
-                mScope.Clear();
-                Env.LocalScope = scope;
                 return ctrl;
             }
         }
-        mScope.Clear();
-        Env.LocalScope = scope;
-
         return StatCtrl.None;
     }
+
     public bool Parse(TokenReader tokenReader)
     {
         while (!tokenReader.IsEnd())
@@ -191,9 +186,9 @@ class ExpStat : IStat
 class CompoundStat : IStat
 {
     public List<IStat> mStatList = new List<IStat>();
-    public Scope mScope = new Scope();
     public StatCtrl Exec(Scope scope)
     {
+        Scope mScope = new Scope();
         mScope.SetUpScope(scope);
         Env.LocalScope = mScope;
         foreach (var stat in mStatList)
@@ -205,7 +200,6 @@ class CompoundStat : IStat
                 return ctrl;
             }
         }
-        mScope.Clear();
         Env.LocalScope = scope;
         return StatCtrl.None;
     }
@@ -329,9 +323,9 @@ class ForStat : IStat
     public IStat mStat;
     public ForInExp mForinExp;
 
-    public Scope mScope = new Scope();
     public StatCtrl Exec(Scope scope)
     {
+        Scope mScope = new Scope();
         mScope.SetUpScope(scope);
         Env.LocalScope = mScope;
         if (mForStatType == ForStatType.LoopFor)
@@ -536,7 +530,7 @@ class JumpStat : IStat
         else if (mToken.tokenType == TokenType.TTReturn)
         {
             var v = mRetExp.Calc();
-            Env.RunList.Add(v);//TODO 多返回值就压多个
+            Env.RunStack.Add(v);//TODO 多返回值就压多个
             return StatCtrl.Return;
         }
         else
@@ -571,13 +565,12 @@ class JumpStat : IStat
 class FunStat : IStat
 {
     public bool mInnerBuild;//内置函数
-    public Action mInnerAction;
+    public Action<Scope> mInnerAction;
     public Token mFunID;
     public List<Token> mParams;//形参
     public CompoundStat mStat;
-    //public int mStackBaseIndex;//执行栈的基地址
-    public Scope mScope = new Scope();//局部变量
-    public Variant mVariant;
+
+
     public void Call(Scope scope)
     {
         //1 调用者把参数压栈
@@ -587,38 +580,41 @@ class FunStat : IStat
         //5 返回值压栈
         //6 调用者清理返回值
 
-        mScope.SetUpScope(scope);
+        //函数不应该访问上层作用域，实现闭包则copy一份
+        //可以访问全局作用域
+        Scope mScope = new Scope();
+        mScope.SetUpScope(Env.GlobalScope);
         Env.LocalScope = mScope;
         for (int i = 0; i < mParams.Count; i++)
         {
-            if (i >= Env.RunList.Count)
+            if (i >= Env.RunStack.Count)
             {
                 break;
             }
             Token t = mParams[i];
-            Variant v = Env.RunList[i];
+            Variant v = Env.RunStack[i];
             Variant l = new Variant();
             l.Assign(v);
             l.id = t.desc;
             mScope.AddVariant(l);
         }
-        //清理多余的参数
-        Env.RunList.Clear();
+        //清理参数
+        Env.RunStack.Clear();
         if (mInnerBuild)
         {
-            mInnerAction.Invoke();
+            mInnerAction.Invoke(mScope);
         }
         else
         {
             mStat.Exec(mScope);
         }
         mScope.Clear();
-        Env.LocalScope = scope;
+        Env.LocalScope = scope;//返回上层作用域
     }
 
     public StatCtrl Exec(Scope scope)
     {
-        mVariant = new Variant();
+        var mVariant = new Variant();
         mVariant.variantType = VariantType.Function;
         mVariant.id = mFunID.desc;
         mVariant.fun = this;

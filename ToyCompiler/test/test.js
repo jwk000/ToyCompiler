@@ -26,7 +26,7 @@ while (true) {
     s = s + s;
     break;
 }
-print(s)
+print(s);
 
 //函数声明
 function f(a, b, c) {
@@ -38,11 +38,19 @@ function f(a, b, c) {
 var d = f(a, b, 2);
 print(d);
 
+//递归函数
+function fib(n) {
+    if (n < 3) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+print(fib(10));
+
 //数组声明
 var arr = [1, 2, 3, "a", "b", "c"];
 //数组访问
-for (var i = 0; i < arr.len(); i++) {
-    print(arr[i]);
+var str = "arr=[";
+for (var i = 0; i < len(arr); i++) {
+    str = str + arr[i];
 }
 
 //对象声明

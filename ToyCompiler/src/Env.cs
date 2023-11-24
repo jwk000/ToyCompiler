@@ -41,9 +41,9 @@ namespace ToyCompiler
 
     static class Env
     {
-        public static List<Variant> RunList = new List<Variant>();//运行栈
+        public static List<Variant> RunStack = new List<Variant>();//函数运行栈
         public static Scope LocalScope;//当前作用域
-        public static Scope GlobalScope = new Scope();//全局符号表
+        public static Scope GlobalScope = new Scope();//全局作用域
 
         public static void RegisterBuildinFunctions()
         {
