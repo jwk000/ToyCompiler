@@ -37,6 +37,10 @@ namespace ToyCompiler
         public const int Load = 25;//从当前作用域加载一个变量
         public const int Store = 26;//把一个变量写入当前作用域
         public const int Assign = 27;//赋值
+        public const int Index = 28;//数组下标
+        public const int Dot = 29;//对象成员
+        public const int NewArray = 30;
+        public const int NewObj = 31;
     }
 
     //记录用来跳转的标签
@@ -82,7 +86,7 @@ namespace ToyCompiler
 
         public void Parse(StatList tree)
         {
-            tree.OnVisit(ctx);
+            tree.OnVisit(ctx.Code);
         }
 
         public void Exec()
@@ -97,6 +101,10 @@ namespace ToyCompiler
                 switch (ins.OpCode)
                 {
                     //todo
+                    case OpCode.NewArray:
+                        //栈顶是array变量
+                        //后面是n个元素
+                        break;
                 }
             }
         }
