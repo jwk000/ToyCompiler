@@ -26,11 +26,11 @@ namespace ToyCompiler
                 new Token(){ tokenType = TokenType.TTID, desc = "arg9"},
             };
             print.mInnerBuild = true;
-            print.mInnerAction = (Scope scope) =>
+            print.mInnerAction = () =>
             {
                 foreach (Token t in print.mParams)
                 {
-                    var v = scope.GetVariant(t.desc);
+                    var v = Env.LocalScope.GetVariant(t.desc);
                     if (v != null)
                     {
                         Console.Write($"{v}\t");
@@ -41,6 +41,10 @@ namespace ToyCompiler
                     }
                 }
                 Console.WriteLine();
+            };
+            print.mInnerVisit = (List<Instruction> code) =>
+            {
+                code.Add(new Instruction(OpCode.Print));
             };
 
             return print;
@@ -55,16 +59,19 @@ namespace ToyCompiler
                 new Token(){tokenType = TokenType.TTID, desc = "arg1"}
             };
             len.mInnerBuild = true;
-            len.mInnerAction = (Scope scope) =>
+            len.mInnerAction = () =>
             {
-                var v = scope.GetVariant("arg1");
+                var v = Env.LocalScope.GetVariant("arg1");
                 VArray arr = v.arr;
                 Variant r = new Variant();
                 r.variantType = VariantType.Number;
                 r.num = arr.Length();
                 Env.RunStack.Add(r);
             };
-
+            len.mInnerVisit = (List<Instruction> code) =>
+            {
+                code.Add(new Instruction(OpCode.Len));
+            };
             return len;
         }
 

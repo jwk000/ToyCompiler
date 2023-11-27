@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,7 +16,8 @@ namespace ToyCompiler
         Array,
         Object,
         Function,
-        Label
+        Label,
+        Enum
     }
 
     class Variant
@@ -29,6 +31,7 @@ namespace ToyCompiler
         public VObject obj;
         public FunStat fun;
         public int label;//vm跳转用的label
+        public IEnumerator enu;//对象迭代器
 
         public void Assign(Variant w)//赋值不包含id
         {
@@ -40,6 +43,15 @@ namespace ToyCompiler
             this.obj = w.obj;
             this.fun = w.fun;
             this.label = w.label;
+            this.enu = w.enu;
+        }
+
+        public Variant Clone()
+        {
+            Variant v = new Variant();
+            v.id=this.id;//连id都一样，作用域不同
+            v.Assign(this); 
+            return v;
         }
 
         public override string ToString()
@@ -50,10 +62,11 @@ namespace ToyCompiler
                 VariantType.Boolean => $"{bol}",
                 VariantType.Number => $"{num}",
                 VariantType.String => $"{str}",
-                VariantType.Array=>$"{arr}",
-                VariantType.Object=>$"{obj}",
-                VariantType.Function=>$"{fun}",
-                VariantType.Label =>$"{label}",
+                VariantType.Array => $"{arr}",
+                VariantType.Object => $"{obj}",
+                VariantType.Function => $"{fun.mFunID}",
+                VariantType.Label => $"{label}",
+                VariantType.Enum=>$"enumerator",
                 _ => $"NotVariant"
             };
         }
@@ -105,6 +118,68 @@ namespace ToyCompiler
             throw new InvalidCastException("variant is not boolean");
         }
 
+        //重载true和false和&可以用&&操作
+        public static bool operator true(Variant v)
+        {
+            if (v.variantType == VariantType.Boolean)
+            {
+                return v.bol;
+            }
+            if (v.variantType == VariantType.Number)
+            {
+                return v.num != 0;
+            }
+            return false;
+        }
+
+        public static bool operator false(Variant v)
+        {
+            if (v.variantType == VariantType.Boolean)
+            {
+                return !v.bol;
+            }
+            if (v.variantType == VariantType.Number)
+            {
+                return v.num == 0;
+            }
+            return false;
+        }
+
+        public static Variant operator &(Variant lhs, Variant rhs)
+        {
+            if (lhs.variantType != rhs.variantType && lhs.variantType != VariantType.Boolean)
+            {
+                throw new Exception("variant type not support operator &");
+            }
+            Variant v = new Variant();
+            v.variantType = VariantType.Boolean;
+            v.bol = lhs.bol & rhs.bol;
+            return v;
+        }
+
+        public static Variant operator |(Variant lhs, Variant rhs)
+        {
+            if (lhs.variantType != rhs.variantType && lhs.variantType != VariantType.Boolean)
+            {
+                throw new Exception("variant type not support operator |");
+            }
+            Variant v = new Variant();
+            v.variantType = VariantType.Boolean;
+            v.bol = lhs.bol | rhs.bol;
+            return v;
+        }
+
+        public static Variant operator !(Variant v)
+        {
+            if (v.variantType != VariantType.Boolean)
+            {
+                throw new Exception("variant type not support operator !");
+            }
+            Variant u = new Variant();
+            u.variantType = VariantType.Boolean;
+            u.bol = !v.bol;
+            return v;
+        }
         #endregion
 
         #region 算术运算
@@ -189,6 +264,25 @@ namespace ToyCompiler
             return v;
         }
 
+        public static Variant operator %(Variant lhs, Variant rhs)
+        {
+            if (lhs.variantType != rhs.variantType)
+            {
+                throw new Exception("variant - not same type");
+            }
+            Variant v = new Variant();
+            v.variantType = rhs.variantType;
+            if (v.variantType == VariantType.Number)
+            {
+                v.num = lhs.num % rhs.num;
+            }
+            else
+            {
+                throw new Exception("variant string not support %");
+            }
+            return v;
+        }
+
         public static Variant operator ++(Variant v)
         {
             if (v.variantType == VariantType.Number)
@@ -219,7 +313,7 @@ namespace ToyCompiler
         #region 比较操作
         public static bool operator ==(Variant lhs, Variant rhs)
         {
-            if(lhs is null && rhs is null)
+            if (lhs is null && rhs is null)
             {
                 return true;
             }
@@ -245,15 +339,15 @@ namespace ToyCompiler
                 {
                     return true;
                 }
-                else if(lhs.variantType == VariantType.Array)
+                else if (lhs.variantType == VariantType.Array)
                 {
                     return lhs.arr == rhs.arr;
                 }
-                else if(lhs.variantType == VariantType.Object)
+                else if (lhs.variantType == VariantType.Object)
                 {
                     return lhs.obj == rhs.obj;
                 }
-                else if(lhs.variantType == VariantType.Function)
+                else if (lhs.variantType == VariantType.Function)
                 {
                     return lhs.fun == rhs.fun;
                 }
@@ -343,19 +437,14 @@ namespace ToyCompiler
 
     }
 
-    interface ILength
-    {
-        double Length();
-    }
 
-
-    class VArray 
+    class VArray
     {
         List<Variant> mArray = new List<Variant>();
 
         public Variant GetAt(int idx)
         {
-            if(idx>=0 && idx < mArray.Count)
+            if (idx >= 0 && idx < mArray.Count)
             {
 
                 return mArray[idx];
@@ -382,7 +471,7 @@ namespace ToyCompiler
         {
             StringBuilder sb = new StringBuilder();
             sb.Append('[');
-            foreach(var v in mArray)
+            foreach (var v in mArray)
             {
                 sb.Append(v).Append(',');
             }
@@ -406,7 +495,7 @@ namespace ToyCompiler
             mDict.Add(id, v);
         }
 
-        public IEnumerator<KeyValuePair<string,Variant>> GetEnumerator()
+        public IEnumerator<KeyValuePair<string, Variant>> GetEnumerator()
         {
             return mDict.GetEnumerator();
         }
@@ -438,10 +527,15 @@ namespace ToyCompiler
             mUpScope = scope;
         }
 
+        public Scope GetUpScope()
+        {
+            return mUpScope;
+        }
+
         public Variant GetVariant(string name)
         {
             Variant v = null;
-            if(mVarDict.TryGetValue(name,out v))
+            if (mVarDict.TryGetValue(name, out v))
             {
                 return v;
             }
@@ -452,22 +546,30 @@ namespace ToyCompiler
             return v;
         }
 
-        public bool AddVariant(Variant v)
+        public void SetVariant(Variant v)
         {
             if (mVarDict.ContainsKey(v.id))
             {
-                return false;
+                mVarDict[v.id] = v;
             }
-
-            mVarDict.Add(v.id, v);
-            return true;
+            else
+            {
+                mVarDict.Add(v.id, v);
+            }
         }
-
 
         public void Clear()
         {
             mVarDict.Clear();
             mUpScope = null;
+        }
+
+        public void Merge(Scope scope)
+        {
+            foreach(var v in scope.mVarDict.Values)
+            {
+                SetVariant(v);
+            }
         }
     }
 }

@@ -58,7 +58,7 @@ namespace ToyCompiler
             v.variantType = VariantType.Function;
             v.fun = fun;
             v.id = fun.mFunID.desc;
-            GlobalScope.AddVariant(v);
+            GlobalScope.SetVariant(v);
         }
 
     }

@@ -54,13 +54,13 @@ class Exp : IExp
             }
             else
             {
-                decl = new VarDeclExp();
+                decl = new VarDeclExp(); //变量声明
                 return decl.Parse(reader);
             }
         }
         else
         {
-            assign = new AssignExp();
+            assign = new AssignExp();//变量赋值
             return assign.Parse(reader);
         }
     }
@@ -84,6 +84,14 @@ class Exp : IExp
         if (decl != null)
         {
             decl.OnVisit(code);
+        }
+        else if(forin != null)
+        {
+            forin.OnVisit(code);
+        }
+        else
+        {
+            assign.OnVisit(code);
         }
     }
 }
@@ -247,14 +255,14 @@ class VarDeclExp : IExp
         v.id = mID.desc;
         Variant ret = mCond.Calc();
         v.Assign(ret);
-        Env.LocalScope.AddVariant(v);
+        Env.LocalScope.SetVariant(v);
         return v;
     }
 
     public void OnVisit(List<Instruction> code)
     {
         mCond.OnVisit(code);
-        code.Add(new Instruction(OpCode.Store) { OpString = mID.desc });
+        code.Add(new Instruction(OpCode.Store) { OpStr = mID.desc });
     }
 
 }
@@ -318,6 +326,7 @@ class ForInExp : IExp
     public void OnVisit(List<Instruction> code)
     {
         mExp.OnVisit(code);
+        code.Add(new Instruction(OpCode.Enum));
     }
 
     public bool Next()
@@ -335,7 +344,7 @@ class ForInExp : IExp
                     v = new Variant();
                     v.variantType = VariantType.Number;
                     v.id = t.desc;
-                    Env.LocalScope.AddVariant(v);
+                    Env.LocalScope.SetVariant(v);
                 }
                 v.num = mIndex++;
 
@@ -346,7 +355,7 @@ class ForInExp : IExp
                 {
                     v = new Variant();
                     v.id = t.desc;
-                    Env.LocalScope.AddVariant(v);
+                    Env.LocalScope.SetVariant(v);
                 }
                 v.Assign(it.Current);
 
@@ -370,7 +379,7 @@ class ForInExp : IExp
                     v = new Variant();
                     v.variantType = VariantType.String;
                     v.id = t.desc;
-                    Env.LocalScope.AddVariant(v);
+                    Env.LocalScope.SetVariant(v);
                 }
                 v.str = it.Current.Key;
 
@@ -381,7 +390,7 @@ class ForInExp : IExp
                 {
                     u = new Variant();
                     u.id = t.desc;
-                    Env.LocalScope.AddVariant(u);
+                    Env.LocalScope.SetVariant(u);
                 }
                 u.Assign(it.Current.Value);
 
@@ -462,11 +471,17 @@ class ConditionExp : IExp
     public void OnVisit(List<Instruction> code)
     {
         left.OnVisit(code);
-        Instruction njump = new Instruction(OpCode.NJump);
-        code.Add(njump);
-        mid.OnVisit(code);
-        njump.OpInt = code.Count;
-        right.OnVisit(code);
+        if (mid != null && right != null)
+        {
+            Instruction njump = new Instruction(OpCode.JumpFalse);
+            code.Add(njump);
+            mid.OnVisit(code);
+            Instruction jumpEnd = new Instruction(OpCode.Jump);
+            code.Add(jumpEnd);
+            njump.OpInt = code.Count;
+            right.OnVisit(code);
+            jumpEnd.OpInt = code.Count;
+        }
     }
 }
 
@@ -524,14 +539,14 @@ class UnaryExp : IExp
         else if (op.tokenType == TokenType.TTPlusPlus)
         {
             unary.OnVisit(code);
-            code.Add(new Instruction(OpCode.Push) { OpDouble = 1 });
+            code.Add(new Instruction(OpCode.Push) { OpVar = 1 });
             code.Add(new Instruction(OpCode.Add));
 
         }
         else if (op.tokenType == TokenType.TTMinusMinus)
         {
             unary.OnVisit(code);
-            code.Add(new Instruction(OpCode.Push) { OpDouble = 1 });
+            code.Add(new Instruction(OpCode.Push) { OpVar = 1 });
             code.Add(new Instruction(OpCode.Sub));
         }
         else if (op.tokenType == TokenType.TTNot)
@@ -777,18 +792,18 @@ class PostfixExp : IExp
         }
         else if (postfixType == PostfixType.FuncCall)
         {
-
+            //栈：函数变量，参数列表，参数数量，返回地址
+            //参数压栈
             foreach (var exp in args)
             {
-                //参数变量最终压入栈顶
                 exp.OnVisit(code);
-                //写入作用域
-                code.Add(new Instruction(OpCode.Store));
             }
-            //栈顶是函数变量
-            code.Add(new Instruction(OpCode.Call));
+            //参数数量
+            code.Add(new Instruction(OpCode.Push) { OpVar = args.Count });
             //返回地址
-            Instruction.ReturnLabel = code.Count;
+            code.Add(new Instruction(OpCode.Push) { OpVar = code.Count +2});
+            //调用就是跳转
+            code.Add(new Instruction(OpCode.Call));
         }
 
         else if (postfixType == PostfixType.Index)//array
@@ -1183,7 +1198,7 @@ class MulExp : IExp
         {
             return left.Calc();
         }
-        if (op.tokenType == TokenType.TTMultiple)
+        else if (op.tokenType == TokenType.TTMultiple)
         {
             return left.Calc() * right.Calc();
         }
@@ -1199,7 +1214,7 @@ class MulExp : IExp
         {
             left.OnVisit(code);
         }
-        if (op.tokenType == TokenType.TTMultiple)
+        else if (op.tokenType == TokenType.TTMultiple)
         {
             left.OnVisit(code);
             right.OnVisit(code);
@@ -1339,20 +1354,20 @@ class PrimExp : IExp
         if (primType == PrimExpType.Number)
         {
             double d = double.Parse(token.desc);
-            code.Add(new Instruction(OpCode.Push) { OpDouble = d });
+            code.Add(new Instruction(OpCode.Push) { OpVar = d });
         }
         else if (primType == PrimExpType.String)
         {
-            code.Add(new Instruction(OpCode.Push) { OpString = token.desc });
+            code.Add(new Instruction(OpCode.Push) { OpVar = token.desc });
         }
         else if (primType == PrimExpType.Boolean)
         {
             bool b = bool.Parse(token.desc);
-            code.Add(new Instruction(OpCode.Push) { OpBool = b });
+            code.Add(new Instruction(OpCode.Push) { OpVar = b });
         }
         else if (primType == PrimExpType.ID)
         {
-            code.Add(new Instruction(OpCode.Load) { OpString = token.desc });
+            code.Add(new Instruction(OpCode.Load) { OpStr = token.desc });
         }
         else if (primType == PrimExpType.Exp)
         {

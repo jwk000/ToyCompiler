@@ -2,20 +2,23 @@
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
+using System.CommandLine;
 
 namespace ToyCompiler
 {
     class Program
     {
+        //tc file.js vm/tr
         static void Main(string[] args)
         {
-            Env.RegisterBuildinFunctions();
-
-            Lexer lexer = new Lexer();
-
             string filename = args[0];
+            string runtype = args[1];
+            
+
             string script = File.ReadAllText(filename);
 
+            //词法分析
+            Lexer lexer = new Lexer();
             if (!lexer.ParseToken(script))
             {
                 Console.WriteLine("lexer parse failed!");
@@ -23,8 +26,9 @@ namespace ToyCompiler
                 return;
             }
             Console.WriteLine("lexer parse success!");
-            TokenReader tokenReader = new TokenReader(lexer.mTokenList);
 
+            //语法分析
+            TokenReader tokenReader = new TokenReader(lexer.mTokenList);
             StatList tree = new StatList();
             if (!tree.Parse(tokenReader))
             {
@@ -32,11 +36,22 @@ namespace ToyCompiler
                 return;
             }
             Console.WriteLine("stat parse success!");
-            //直接解释执行
-            tree.Exec(Env.GlobalScope);
-            //编译成指令执行
-            VM vm = new VM();
-            vm.Parse(tree);
+
+            //执行
+            if(runtype == "tr")
+            {
+                //直接解释执行
+                Env.RegisterBuildinFunctions();
+                tree.Exec(Env.GlobalScope);
+            }
+            else if(runtype == "vm")
+            {
+                //编译成指令执行
+                VM vm = new VM();
+                vm.Visit(tree);
+                vm.DumpInstructions();
+                vm.Exec();
+            }
             Console.WriteLine("press any key to exit...");
             Console.Read();
         }

@@ -68,6 +68,8 @@ class StatList : IStat
         {
             stat.OnVisit(code);
         }
+        //添加一个停机指令
+        code.Add(new Instruction(OpCode.Halt));
     }
 
     public bool Parse(TokenReader tokenReader)
@@ -309,7 +311,7 @@ class IfStat : IStat
     public void OnVisit(List<Instruction> code)
     {
         mCondExp.OnVisit(code);
-        Instruction njump = new Instruction(OpCode.NJump);
+        Instruction njump = new Instruction(OpCode.JumpFalse);
         code.Add(njump);
         mIfStat.OnVisit(code);
         njump.OpInt = code.Count; //妙
@@ -435,43 +437,61 @@ class ForStat : IStat
     }
     public void OnVisit(List<Instruction> code)
     {
+        
         code.Add(new Instruction(OpCode.EnterScope));
         if (mForStatType == ForStatType.LoopFor)
         {
             mExp1?.OnVisit(code);
             int label = code.Count;//条件判断
+            Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
+            Instruction njump = new Instruction(OpCode.JumpFalse);
+            JumpLabel jumplabel = new JumpLabel(cjump, njump);
+            Instruction.JumpLabels.Push(jumplabel);
+
             if (mExp2 == null)
             {
-                code.Add(new Instruction(OpCode.Push) { OpInt = 1 }) ;
+                code.Add(new Instruction(OpCode.Push) { OpVar = true }) ;
             }
             else
             {
                 mExp2.OnVisit(code);
             }
-            Instruction njump = new Instruction(OpCode.NJump);
             code.Add(njump);
             mStat.OnVisit(code);
             mExp3?.OnVisit(code);
-            code.Add(new Instruction(OpCode.Jump) { OpInt = label });
+            code.Add(cjump);
             njump.OpInt = code.Count;
+            Instruction.JumpLabels.Pop();
         }
         else if (mForStatType == ForStatType.IterFor)
         {
             mForinExp.OnVisit(code);
-            int label = code.Count;
-            Instruction next = new Instruction(OpCode.Next);
-            code.Add(next);//需要保证栈顶是exp返回的对象或数组
+            //需要保证栈顶是exp返回的对象或数组
             //迭代器添加的两个变量压栈
-            code.Add(new Instruction(OpCode.Push) { OpString = mForinExp.mParams[0].desc });
-            code.Add(new Instruction(OpCode.Push) { OpString = mForinExp.mParams[1].desc });
+            code.Add(new Instruction(OpCode.Push) { OpVar = mForinExp.mParams[0].desc });
+            code.Add(new Instruction(OpCode.Push) { OpVar = mForinExp.mParams[1].desc });
+            //迭代器
+            code.Add(new Instruction(OpCode.Enum));
+            //循环起点
+            int label = code.Count;
+            Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
+            Instruction njump = new Instruction(OpCode.JumpFalse);
+            JumpLabel jumplabel = new JumpLabel(cjump, njump);
+            Instruction.JumpLabels.Push(jumplabel);
+
+            Instruction next = new Instruction(OpCode.Next);
+            code.Add(next);
             mStat.OnVisit(code);
             //迭代器添加的两个变量出栈
             code.Add(new Instruction(OpCode.Pop));
             code.Add(new Instruction(OpCode.Pop));
-            code.Add(new Instruction(OpCode.Jump) { OpInt=label});
+            code.Add(cjump);
             next.OpInt = code.Count;//next完成后跳转到后面的指令
+            njump.OpInt = code.Count;
             //清除exp返回值
             code.Add(new Instruction(OpCode.Pop));
+            //支持多级break
+            Instruction.JumpLabels.Pop();
         }
             
         code.Add(new Instruction(OpCode.LeaveScope));
@@ -582,11 +602,17 @@ class WhileStat : IStat
     public void OnVisit(List<Instruction> code)
     {
         int label = code.Count;
+        Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
+        Instruction njump = new Instruction(OpCode.JumpFalse);
+        JumpLabel jumplabel = new JumpLabel(cjump, njump);
+        Instruction.JumpLabels.Push(jumplabel);
+
         mCondExp.OnVisit(code);
-        Instruction njump = new Instruction(OpCode.NJump);
         mStat.OnVisit(code);
-        code.Add(new Instruction(OpCode.Jump) { OpInt=label});
+        code.Add(cjump);
         njump.OpInt = code.Count;
+
+        Instruction.JumpLabels.Pop();
     }
 
     public bool Parse(TokenReader tokenReader)
@@ -653,16 +679,17 @@ class JumpStat : IStat
         if (mToken.tokenType == TokenType.TTBreak)
         {
             JumpLabel label = Instruction.JumpLabels.Peek();
-            code.Add(new Instruction(OpCode.Jump) { OpInt = label.BreakLabel});
+            code.Add(label.BreakJump);
         }
         else if (mToken.tokenType == TokenType.TTContinue)
         {
             JumpLabel label = Instruction.JumpLabels.Peek();
-            code.Add(new Instruction(OpCode.Jump) { OpInt = label.ContinueLabel});
+            code.Add(label.ContinueJump);
         }
         else if (mToken.tokenType == TokenType.TTReturn)
         {
-            code.Add(new Instruction(OpCode.Jump) { OpInt = Instruction.ReturnLabel});
+            mRetExp.OnVisit(code);
+            code.Add(new Instruction(OpCode.Ret));
         }
 
     }
@@ -693,7 +720,9 @@ class JumpStat : IStat
 class FunStat : IStat
 {
     public bool mInnerBuild;//内置函数
-    public Action<Scope> mInnerAction;
+    public Action mInnerAction;
+    public Action<List<Instruction>> mInnerVisit;
+
     public Token mFunID;
     public List<Token> mParams;//形参
     public CompoundStat mStat;
@@ -724,13 +753,13 @@ class FunStat : IStat
             Variant l = new Variant();
             l.Assign(v);
             l.id = t.desc;
-            mScope.AddVariant(l);
+            mScope.SetVariant(l);
         }
         //清理参数
         Env.RunStack.Clear();
         if (mInnerBuild)
         {
-            mInnerAction.Invoke(mScope);
+            mInnerAction.Invoke();
         }
         else
         {
@@ -746,7 +775,7 @@ class FunStat : IStat
         v.variantType = VariantType.Function;
         v.id = mFunID.desc;
         v.fun = this;
-        scope.AddVariant(v);
+        scope.SetVariant(v);
         return StatCtrl.None;
     }
 
@@ -755,17 +784,25 @@ class FunStat : IStat
         var v = new Variant();
         v.variantType = VariantType.Function;
         v.id = mFunID.desc;
+        v.fun = this;
         code.Add(new Instruction(OpCode.Push) { OpVar = v });
-        code.Add(new Instruction(OpCode.Store));
+        code.Add(new Instruction(OpCode.Store));//栈空了
+        Instruction jump = new Instruction(OpCode.Jump);//函数只能被调用，自己不执行
+        code.Add(jump);
         v.label = code.Count;
 
-        //调用者负责装载参数
-        foreach (Token token in mParams)
+        if (mInnerBuild)
         {
-            code.Add(new Instruction(OpCode.Load) { OpString = token.desc });
+            mInnerVisit.Invoke(code);
         }
-        mStat.OnVisit(code);
+        else
+        {
+            mStat.OnVisit(code);
+        }
         //返回值在栈顶，return语句清栈后写入返回值
+        //手动return一下
+        code.Add(new Instruction(OpCode.Ret));
+        jump.OpInt = code.Count;
     }
 
     public bool Parse(TokenReader tokenReader)

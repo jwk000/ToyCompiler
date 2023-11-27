@@ -88,7 +88,7 @@ namespace ToyCompiler
 
         public override string ToString()
         {
-            return $"<{tokenType}>{desc}";
+            return $"<{tokenType,-20}> {desc,-20}";
         }
 
         public static string GetTokenString(List<Token> tokens)
@@ -821,10 +821,10 @@ namespace ToyCompiler
                     }
                 }
             }
-
-            if (st != TokenState.None)
+            if (st == TokenState.Comment) { st = TokenState.None; }
+            if (st != TokenState.None )
             {
-                Console.WriteLine("invalid end!");
+                Console.WriteLine("invalid end! token state={0}",st);
                 return false;
             }
             return true;
