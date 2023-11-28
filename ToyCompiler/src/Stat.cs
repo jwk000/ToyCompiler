@@ -130,19 +130,19 @@ class Stat : IStat
         switch (mStatType)
         {
             case StatType.StatCompound:
-                mCompundStat.OnVisit(code);break;
+                mCompundStat.OnVisit(code); break;
             case StatType.StatExp:
                 mExpStat.OnVisit(code); break;
             case StatType.StatFor:
                 mForStat.OnVisit(code); break;
             case StatType.StatIf:
-                 mIfStat.OnVisit(code); break;
+                mIfStat.OnVisit(code); break;
             case StatType.StatWhile:
-                 mWhileStat.OnVisit(code); break;
+                mWhileStat.OnVisit(code); break;
             case StatType.StatJump:
-                 mJumpStat.OnVisit(code); break;
+                mJumpStat.OnVisit(code); break;
             case StatType.StatFun:
-                 mFunStat.OnVisit(code); break;
+                mFunStat.OnVisit(code); break;
             default:
                 break;
         }
@@ -206,6 +206,7 @@ class ExpStat : IStat
     }
     public void OnVisit(List<Instruction> code)
     {
+        //如果是个语句则执行后栈应该是空的
         mExp.OnVisit(code);
     }
     public bool Parse(TokenReader tokenReader)
@@ -243,12 +244,13 @@ class CompoundStat : IStat
 
     public void OnVisit(List<Instruction> code)
     {
-        code.Add(new Instruction(OpCode.EnterScope));
-        foreach(var stat in mStatList) 
-        { 
+        //嵌套scope不好处理break和continue
+        //code.Add(new Instruction(OpCode.EnterScope));
+        foreach (var stat in mStatList)
+        {
             stat.OnVisit(code);
         }
-        code.Add(new Instruction(OpCode.LeaveScope));
+        //code.Add(new Instruction(OpCode.LeaveScope));
     }
 
     public bool Parse(TokenReader tokenReader)
@@ -311,14 +313,17 @@ class IfStat : IStat
     public void OnVisit(List<Instruction> code)
     {
         mCondExp.OnVisit(code);
-        Instruction njump = new Instruction(OpCode.JumpFalse);
+        Instruction njump = new Instruction(OpCode.JumpFalse);//跳过if
         code.Add(njump);
         mIfStat.OnVisit(code);
+        Instruction jump = new Instruction(OpCode.Jump);//跳过else
+        code.Add(jump);
         njump.OpInt = code.Count; //妙
         if (mElseStat != null)
         {
             mElseStat.OnVisit(code);
         }
+        jump.OpInt = code.Count;
     }
     public bool Parse(TokenReader tokenReader)
     {
@@ -437,30 +442,50 @@ class ForStat : IStat
     }
     public void OnVisit(List<Instruction> code)
     {
-        
+
         code.Add(new Instruction(OpCode.EnterScope));
         if (mForStatType == ForStatType.LoopFor)
         {
-            mExp1?.OnVisit(code);
-            int label = code.Count;//条件判断
-            Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
+            if (mExp1 != null)
+            {
+                mExp1.OnVisit(code);
+                code.Add(new Instruction(OpCode.Pop));
+            }
+            //第一次不执行后处理
+            Instruction firstJump = new Instruction(OpCode.Jump);
+            code.Add(firstJump);
+
+            //continue 从这里开始
+            Instruction cjump = new Instruction(OpCode.Jump) { OpInt = code.Count };
             Instruction njump = new Instruction(OpCode.JumpFalse);
-            JumpLabel jumplabel = new JumpLabel(cjump, njump);
+            Instruction bjump = new Instruction(OpCode.Jump);
+            JumpLabel jumplabel = new JumpLabel(cjump, bjump);
             Instruction.JumpLabels.Push(jumplabel);
 
+            //后处理
+            if (mExp3 != null)
+            {
+                mExp3.OnVisit(code);
+                code.Add(new Instruction(OpCode.Pop));
+            }
+            firstJump.OpInt = code.Count;
+
+            //条件判断
             if (mExp2 == null)
             {
-                code.Add(new Instruction(OpCode.Push) { OpVar = true }) ;
+                code.Add(new Instruction(OpCode.Push) { OpVar = true });
             }
             else
             {
                 mExp2.OnVisit(code);
             }
             code.Add(njump);
+            //循环体
             mStat.OnVisit(code);
-            mExp3?.OnVisit(code);
+
             code.Add(cjump);
             njump.OpInt = code.Count;
+            bjump.OpInt = code.Count;
             Instruction.JumpLabels.Pop();
         }
         else if (mForStatType == ForStatType.IterFor)
@@ -476,7 +501,8 @@ class ForStat : IStat
             int label = code.Count;
             Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
             Instruction njump = new Instruction(OpCode.JumpFalse);
-            JumpLabel jumplabel = new JumpLabel(cjump, njump);
+            Instruction bjump = new Instruction(OpCode.Jump);
+            JumpLabel jumplabel = new JumpLabel(cjump, bjump);
             Instruction.JumpLabels.Push(jumplabel);
 
             Instruction next = new Instruction(OpCode.Next);
@@ -488,12 +514,13 @@ class ForStat : IStat
             code.Add(cjump);
             next.OpInt = code.Count;//next完成后跳转到后面的指令
             njump.OpInt = code.Count;
+            bjump.OpInt = code.Count;
             //清除exp返回值
             code.Add(new Instruction(OpCode.Pop));
             //支持多级break
             Instruction.JumpLabels.Pop();
         }
-            
+
         code.Add(new Instruction(OpCode.LeaveScope));
     }
     public bool Parse(TokenReader tokenReader)
@@ -604,14 +631,16 @@ class WhileStat : IStat
         int label = code.Count;
         Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
         Instruction njump = new Instruction(OpCode.JumpFalse);
-        JumpLabel jumplabel = new JumpLabel(cjump, njump);
+        Instruction bjump = new Instruction(OpCode.Jump);
+        JumpLabel jumplabel = new JumpLabel(cjump, bjump);
         Instruction.JumpLabels.Push(jumplabel);
 
         mCondExp.OnVisit(code);
+        code.Add(njump);
         mStat.OnVisit(code);
         code.Add(cjump);
         njump.OpInt = code.Count;
-
+        bjump.OpInt = code.Count;
         Instruction.JumpLabels.Pop();
     }
 
@@ -673,7 +702,7 @@ class JumpStat : IStat
             throw new Exception($"{mToken} is not valid jump stat!");
         }
     }
-    
+
     public void OnVisit(List<Instruction> code)
     {
         if (mToken.tokenType == TokenType.TTBreak)

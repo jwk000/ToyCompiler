@@ -187,8 +187,8 @@ namespace ToyCompiler
                         }
                     case OpCode.Add:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a + b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -197,8 +197,8 @@ namespace ToyCompiler
                         }
                     case OpCode.Sub:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a - b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -207,8 +207,8 @@ namespace ToyCompiler
                         }
                     case OpCode.Mul:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a * b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -217,8 +217,8 @@ namespace ToyCompiler
                         }
                     case OpCode.Div:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a / b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -227,8 +227,8 @@ namespace ToyCompiler
                         }
                     case OpCode.Rem:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a % b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -237,8 +237,8 @@ namespace ToyCompiler
                         }
                     case OpCode.EQ:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a == b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -247,8 +247,8 @@ namespace ToyCompiler
                         }
                     case OpCode.NE:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a != b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -257,8 +257,8 @@ namespace ToyCompiler
                         }
                     case OpCode.LT:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a < b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -267,8 +267,8 @@ namespace ToyCompiler
                         }
                     case OpCode.LE:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a <= b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -277,8 +277,8 @@ namespace ToyCompiler
                         }
                     case OpCode.GT:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a > b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -287,8 +287,8 @@ namespace ToyCompiler
                         }
                     case OpCode.GE:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a >= b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -297,8 +297,8 @@ namespace ToyCompiler
                         }
                     case OpCode.And:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a && b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -307,8 +307,8 @@ namespace ToyCompiler
                         }
                     case OpCode.Or:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             Variant c = a || b;
                             ctx.Stack.Push(c);
                             ctx.SP--;
@@ -350,12 +350,10 @@ namespace ToyCompiler
                         }
                     case OpCode.Assign:
                         {
-                            Variant a = ctx.Stack.Pop();
                             Variant b = ctx.Stack.Pop();
+                            Variant a = ctx.Stack.Pop();
                             a.Assign(b);
-                            ctx.Stack.Push(a);
-                            ctx.LocalScope.SetVariant(a);
-                            ctx.SP--;
+                            ctx.SP-=2;
                             ctx.IP++;
                             break;
                         }
@@ -494,6 +492,7 @@ namespace ToyCompiler
                             {
                                 ctx.IP++;
                             }
+                            ctx.SP--;
                             break;
                         }
                     case OpCode.JumpFalse:
@@ -506,6 +505,7 @@ namespace ToyCompiler
                             {
                                 ctx.IP++;
                             }
+                            ctx.SP--;
                             break;
                         }
                     case OpCode.Call:
@@ -534,7 +534,7 @@ namespace ToyCompiler
                         {
                             //栈上保留的都是返回值
                             List<Variant> rets = new List<Variant>();
-                            while (ctx.Stack.Count > ctx.BP)
+                            while (ctx.Stack.Count > ctx.BP+1)
                             {
                                 rets.Add(ctx.Stack.Pop());
                             }
@@ -546,7 +546,13 @@ namespace ToyCompiler
                                 ctx.Stack.Pop();//参数出栈
                             }
                             ctx.Stack.Pop();//函数变量出栈
-                            ctx.SP -= rets.Count + 4 + argNum;
+                            //返回值压栈
+                            for(int i = 0; i < rets.Count; i++)
+                            {
+                                ctx.Stack.Push(rets[i]);
+                            }
+                            
+                            ctx.SP -= 4 + argNum;
                             break;
                         }
                     case OpCode.Print:

@@ -88,7 +88,7 @@ namespace ToyCompiler
 
         public override string ToString()
         {
-            return $"<{tokenType,-20}> {desc,-20}";
+            return $"<{tokenType,-10}> {desc,-10}";
         }
 
         public static string GetTokenString(List<Token> tokens)

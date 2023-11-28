@@ -64,7 +64,7 @@ namespace ToyCompiler
                 VariantType.String => $"{str}",
                 VariantType.Array => $"{arr}",
                 VariantType.Object => $"{obj}",
-                VariantType.Function => $"{fun.mFunID}",
+                VariantType.Function => $"{fun.mFunID.desc}",
                 VariantType.Label => $"{label}",
                 VariantType.Enum=>$"enumerator",
                 _ => $"NotVariant"
@@ -325,7 +325,7 @@ namespace ToyCompiler
             {
                 if (lhs.variantType == VariantType.Number)
                 {
-                    return lhs.num == rhs.num;
+                    return Math.Abs(lhs.num - rhs.num)<0.0000001;
                 }
                 else if (lhs.variantType == VariantType.String)
                 {
@@ -534,6 +534,10 @@ namespace ToyCompiler
 
         public Variant GetVariant(string name)
         {
+            if (string.IsNullOrEmpty(name))
+            {
+                return null;
+            }
             Variant v = null;
             if (mVarDict.TryGetValue(name, out v))
             {
@@ -548,14 +552,17 @@ namespace ToyCompiler
 
         public void SetVariant(Variant v)
         {
-            if (mVarDict.ContainsKey(v.id))
+            Variant findv = GetVariant(v.id);
+            if(findv != null)
             {
-                mVarDict[v.id] = v;
+                if(findv != v)
+                {
+                    throw new Exception($"variant {v.id} exist in this scope");
+                }
+                return;
             }
-            else
-            {
-                mVarDict.Add(v.id, v);
-            }
+            
+            mVarDict.Add(v.id, v);
         }
 
         public void Clear()

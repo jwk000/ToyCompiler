@@ -184,37 +184,39 @@ class AssignExp : IExp
             left.OnVisit(code);
             right.OnVisit(code);
             code.Add(new Instruction(OpCode.Assign));
-
         }
         else if (op.tokenType == TokenType.TTPlusAssign)
         {
             left.OnVisit(code);
+            code.Add(new Instruction(OpCode.SLoad) { OpInt=1});
             right.OnVisit(code);
             code.Add(new Instruction(OpCode.Add));
-            code.Add(new Instruction(OpCode.Store));
+            code.Add(new Instruction(OpCode.Assign));
         }
         else if (op.tokenType == TokenType.TTMinusAssign)
         {
             left.OnVisit(code);
+            code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
             right.OnVisit(code);
             code.Add(new Instruction(OpCode.Sub));
-            code.Add(new Instruction(OpCode.Store));
+            code.Add(new Instruction(OpCode.Assign));
         }
         else if (op.tokenType == TokenType.TTMultipleAssign)
         {
             left.OnVisit(code);
+            code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
             right.OnVisit(code);
             code.Add(new Instruction(OpCode.Mul));
-            code.Add(new Instruction(OpCode.Store));
+            code.Add(new Instruction(OpCode.Assign));
 
         }
         else if (op.tokenType == TokenType.TTDivisionAssign)
         {
             left.OnVisit(code);
+            code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
             right.OnVisit(code);
             code.Add(new Instruction(OpCode.Div));
-            code.Add(new Instruction(OpCode.Store));
-
+            code.Add(new Instruction(OpCode.Assign));
         }
 
     }
@@ -539,15 +541,18 @@ class UnaryExp : IExp
         else if (op.tokenType == TokenType.TTPlusPlus)
         {
             unary.OnVisit(code);
+            code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
             code.Add(new Instruction(OpCode.Push) { OpVar = 1 });
             code.Add(new Instruction(OpCode.Add));
-
+            code.Add(new Instruction(OpCode.Assign));
         }
         else if (op.tokenType == TokenType.TTMinusMinus)
         {
             unary.OnVisit(code);
+            code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
             code.Add(new Instruction(OpCode.Push) { OpVar = 1 });
             code.Add(new Instruction(OpCode.Sub));
+            code.Add(new Instruction(OpCode.Assign));
         }
         else if (op.tokenType == TokenType.TTNot)
         {
@@ -782,13 +787,18 @@ class PostfixExp : IExp
     {
         if (postfixType == PostfixType.PlusPlus)
         {
-            code.Add(new Instruction(OpCode.Push) { OpInt = 1 });
+            code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
+            code.Add(new Instruction(OpCode.Push) { OpVar = 1 });
             code.Add(new Instruction(OpCode.Add));
+            code.Add(new Instruction(OpCode.Assign));
+
         }
         else if (postfixType == PostfixType.MinusMinus)
         {
-            code.Add(new Instruction(OpCode.Push) { OpInt = 1 });
+            code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
+            code.Add(new Instruction(OpCode.Push) { OpVar = 1 });
             code.Add(new Instruction(OpCode.Sub));
+            code.Add(new Instruction(OpCode.Assign));
         }
         else if (postfixType == PostfixType.FuncCall)
         {
