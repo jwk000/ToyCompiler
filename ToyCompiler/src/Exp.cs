@@ -30,11 +30,33 @@ namespace ToyCompiler;
  * 
  */
 
+enum ExpType
+{
+    ETNone,
+    ETAssign ,
+    ETVarDecl ,
+    ETForIn ,
+    ETCondition ,
+    ETOr,
+    ETAnd,
+    ETNot,
+    ETEqual,
+    ETRelation,
+    ETAdd,
+    ETMul,
+    ETPreInc,
+    ETPosInc,
+    ETCall,
+    ETPrim,
+
+}
+
 interface IExp
 {
     bool Parse(TokenReader reader);
     Variant Calc();
     void OnVisit(List<Instruction> code);
+    ExpType GetExpType();
 }
 
 class Exp : IExp
@@ -42,6 +64,7 @@ class Exp : IExp
     public AssignExp assign;
     public VarDeclExp decl;
     public ForInExp forin;
+    
     public bool Parse(TokenReader reader)
     {
         Token t = reader.Peek();
@@ -63,6 +86,29 @@ class Exp : IExp
             assign = new AssignExp();//变量赋值
             return assign.Parse(reader);
         }
+    }
+    public ExpType GetExpType()
+    {
+        if (assign != null) return assign.GetExpType();
+        if (decl != null) return decl.GetExpType();
+        if (forin != null) return forin.GetExpType();
+        return ExpType.ETNone;
+    }
+
+    public void MaybeAddClear(List<Instruction> code)
+    {
+        switch (GetExpType())
+        {
+            case ExpType.ETAssign:
+            case ExpType.ETPreInc:
+            case ExpType.ETPosInc:
+            case ExpType.ETCall:
+                code.Add(new Instruction(OpCode.Clear));
+                break ;
+            default:
+                break;
+        }
+                
     }
     public Variant Calc()
     {
@@ -128,6 +174,15 @@ class AssignExp : IExp
         }
 
         return true;
+    }
+
+    public ExpType GetExpType()
+    {
+        if (op == null)
+        {
+            return left.GetExpType();
+        }
+        return ExpType.ETAssign;
     }
     public Variant Calc()
     {
@@ -251,6 +306,10 @@ class VarDeclExp : IExp
         return mCond.Parse(reader);
     }
 
+    public ExpType GetExpType()
+    {
+        return ExpType.ETVarDecl;
+    }
     public Variant Calc()
     {
         Variant v = new Variant();
@@ -308,6 +367,10 @@ class ForInExp : IExp
         return mExp.Parse(reader);
     }
 
+    public ExpType GetExpType()
+    {
+        return ExpType.ETForIn;
+    }
     public Variant Calc()
     {
         var v = mExp.Calc();
@@ -453,6 +516,14 @@ class ConditionExp : IExp
         return true;
     }
 
+    public ExpType GetExpType()
+    {
+        if (mid == null)
+        {
+            return left.GetExpType();
+        }
+        return ExpType.ETCondition;
+    }
     public Variant Calc()
     {
         var v = left.Calc();
@@ -507,6 +578,18 @@ class UnaryExp : IExp
         return postfix.Parse(reader);
     }
 
+    public ExpType GetExpType()
+    {
+        if (op == null)
+        {
+            return postfix.GetExpType();
+        }
+        if(op.tokenType == TokenType.TTPlusPlus || op.tokenType == TokenType.TTMinusMinus)
+        {
+            return ExpType.ETPreInc;
+        }
+        return ExpType.ETNot;
+    }
     public Variant Calc()
     {
         if (op == null)
@@ -682,6 +765,22 @@ class PostfixExp : IExp
         return true;
     }
 
+    public ExpType GetExpType()
+    {
+        if(postfixType == PostfixType.None)
+        {
+            return prim.GetExpType();
+        }
+        if(postfixType == PostfixType.FuncCall)
+        {
+            return ExpType.ETCall;
+        }
+        if(postfixType == PostfixType.PlusPlus||postfixType == PostfixType.MinusMinus)
+        {
+            return ExpType.ETPosInc;
+        }
+        return ExpType.ETPrim;
+    }
     public Variant Calc()
     {
         var v = prim.Calc();
@@ -857,6 +956,14 @@ class OrExp : IExp
         return true;
     }
 
+    public ExpType GetExpType()
+    {
+        if (right == null)
+        {
+            return left.GetExpType();
+        }
+        return ExpType.ETOr;
+    }
     public Variant Calc()
     {
         if (right == null)
@@ -913,6 +1020,14 @@ class AndExp : IExp
 
     }
 
+    public ExpType GetExpType()
+    {
+        if (right == null)
+        {
+            return left.GetExpType();
+        }
+        return ExpType.ETAnd;
+    }
     public Variant Calc()
     {
         if (right == null)
@@ -972,6 +1087,14 @@ class EqualExp : IExp
 
     }
 
+    public ExpType GetExpType()
+    {
+        if (op == null)
+        {
+            return left.GetExpType();
+        }
+        return ExpType.ETEqual;
+    }
     public Variant Calc()
     {
         if (op == null)
@@ -1040,6 +1163,15 @@ class RelationExp : IExp
 
         return true;
 
+    }
+
+    public ExpType GetExpType()
+    {
+        if (op == null)
+        {
+            return left.GetExpType();
+        }
+        return ExpType.ETRelation;
     }
 
     public Variant Calc()
@@ -1133,6 +1265,15 @@ class PlusExp : IExp
         return true;
     }
 
+    public ExpType GetExpType()
+    {
+        if (op == null)
+        {
+            return left.GetExpType();
+        }
+        return ExpType.ETAdd;
+    }
+
     public Variant Calc()
     {
         if (op == null)
@@ -1201,6 +1342,15 @@ class MulExp : IExp
         }
 
         return true;
+    }
+
+    public ExpType GetExpType()
+    {
+        if (op == null)
+        {
+            return left.GetExpType();
+        }
+        return ExpType.ETMul;
     }
     public Variant Calc()
     {
@@ -1314,9 +1464,18 @@ class PrimExp : IExp
             Console.WriteLine("invalid prim token {0}", t);
             return false;
         }
-
-
     }
+
+    public ExpType GetExpType()
+    {
+        if (primType == PrimExpType.Exp)
+        {
+            return exp.GetExpType();
+        }
+            
+        return ExpType.ETPrim;
+    }
+
     public Variant Calc()
     {
         if (primType == PrimExpType.Number)
@@ -1438,6 +1597,11 @@ class ArrayExp : IExp
         return true;
     }
 
+    public ExpType GetExpType()
+    {
+        return ExpType.ETPrim;
+    }
+
     public Variant Calc()
     {
         Variant v = new Variant();
@@ -1521,6 +1685,11 @@ class ObjectExp : IExp
 
         return true;
 
+    }
+
+    public ExpType GetExpType()
+    {
+        return ExpType.ETPrim;
     }
 
     public Variant Calc()

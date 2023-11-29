@@ -10,9 +10,13 @@ namespace ToyCompiler
         //tc file.js vm/tr
         static void Main(string[] args)
         {
-            string filename = args[0];
-            string runtype = args[1];
-            
+            string runtype = args[0];
+            string filename = args[1];
+            bool debug = false;
+            if(args.Length> 2)
+            {
+                debug = args[2] == "d";
+            }
 
             string script = File.ReadAllText(filename);
 
@@ -49,7 +53,8 @@ namespace ToyCompiler
                 VM vm = new VM();
                 vm.Visit(tree);
                 vm.DumpInstructions();
-                vm.Exec();
+                vm.AttachDebugger();
+                vm.Run();
             }
             Console.WriteLine("press any key to exit...");
             Console.Read();

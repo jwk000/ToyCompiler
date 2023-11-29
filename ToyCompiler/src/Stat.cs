@@ -208,6 +208,7 @@ class ExpStat : IStat
     {
         //如果是个语句则执行后栈应该是空的
         mExp.OnVisit(code);
+        mExp.MaybeAddClear(code);
     }
     public bool Parse(TokenReader tokenReader)
     {
@@ -217,7 +218,23 @@ class ExpStat : IStat
             return false;
         }
         mExp = new Exp();
-        return mExp.Parse(expTokens);
+        return mExp.Parse(expTokens) && IsValidExpStatement();
+    }
+
+    //只有赋值，声明，自增，函数调用可以作为语句存在
+    bool IsValidExpStatement()
+    {
+        switch (mExp.GetExpType())
+        {
+            case ExpType.ETAssign:
+            case ExpType.ETVarDecl:
+            case ExpType.ETPreInc:
+            case ExpType.ETPosInc:
+            case ExpType.ETCall:
+                return true;
+            default:
+                return false;
+        }
     }
 }
 
@@ -449,7 +466,7 @@ class ForStat : IStat
             if (mExp1 != null)
             {
                 mExp1.OnVisit(code);
-                code.Add(new Instruction(OpCode.Pop));
+                mExp1.MaybeAddClear(code);
             }
             //第一次不执行后处理
             Instruction firstJump = new Instruction(OpCode.Jump);
@@ -466,7 +483,7 @@ class ForStat : IStat
             if (mExp3 != null)
             {
                 mExp3.OnVisit(code);
-                code.Add(new Instruction(OpCode.Pop));
+                mExp3.MaybeAddClear(code);
             }
             firstJump.OpInt = code.Count;
 

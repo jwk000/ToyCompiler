@@ -26,7 +26,7 @@ namespace ToyCompiler
         public const int Or = 14; //Or
         public const int Not = 15;//Not
         public const int Jump = 16;//JMP
-        public const int JumpTrue = 17;//NJMP
+        public const int JumpTrue = 17;
         public const int Call = 18;//Call
         public const int Ret = 19; //RET
         public const int Halt = 20;//Halt
@@ -46,12 +46,13 @@ namespace ToyCompiler
         public const int SLoad = 34;//栈上的变量压入栈顶
         public const int Print = 35;
         public const int Len = 36;
+        public const int Clear = 37;//清空栈帧
 
         public static string[] OpCodeNames = new string[]
         {
             "NOP","PUSH","ADD","SUB","MUL","DIV","REM","EQ","NE","LT","LE","GT","GE","AND","OR","NOT","JUMP","JUMPTRUE",
             "CALL","RET","HALT","ENTERSCOPE","LEAVESCOPE","NEXT","POP","LOAD","STORE","ASSIGN","INDEX","DOT","NEWARRAY","NEWOBJ",
-            "ENUM","JUMPFALSE","SLOAD","PRINT","LEN"
+            "ENUM","JUMPFALSE","SLOAD","PRINT","LEN","CLEAR"
         };
     }
 
@@ -62,8 +63,11 @@ namespace ToyCompiler
         public Instruction BreakJump;
         public JumpLabel(Instruction c, Instruction bj) { ContinueJump = c; BreakJump = bj; }
     }
+
+
     class Instruction
     {
+        public int CodeLine;
         public int Op;
         public int OpInt;
         public string OpStr;
@@ -95,7 +99,7 @@ namespace ToyCompiler
                     break;
                     
             }
-            return $"{OpCode.OpCodeNames[Op],-12} {param}";
+            return $"{CodeLine,4:0000} {OpCode.OpCodeNames[Op],-12} {param}";
         }
 
         public static Instruction NOP = new Instruction(0);
@@ -134,36 +138,166 @@ namespace ToyCompiler
         {
             list.Add(value);
         }
+
+    }
+
+    class Debugger
+    {
+        Context mCtx;
+        List<int> mBreakPoints = new List<int>();
+        bool mStepMode = false;
+        string mLastCmd = "";
+        public Debugger(Context ctx)
+        {
+            mCtx = ctx;
+        }
+
+
+        public void BeforeStep()
+        {
+            if(mStepMode || mBreakPoints.Contains(mCtx.IP))
+            {
+                WaitRun();
+            }
+        }
+
+        public void AfterStep(Instruction ins)
+        {
+            if(mStepMode)
+            {
+                StringBuilder sb = new StringBuilder();
+                foreach (var v in mCtx.Stack)
+                {
+                    sb.Append(v.ToString()+" ");
+                }
+                
+                Console.WriteLine($"{ins,-28} [IP:{mCtx.IP,4}][BP:{mCtx.BP,4}][SP:{mCtx.SP,4}]|Stack:{sb}");
+            }
+        }
+
+        public void WaitRun()
+        {
+            Console.Write(">");
+            string cmd = Console.ReadLine();
+            if(cmd.Length == 0)
+            {
+                if (mLastCmd.Length>0)
+                {
+                    cmd = mLastCmd;
+                }
+            }
+            if (cmd.Length == 0)
+            {
+                WaitRun();
+                return;
+            }
+            mLastCmd = cmd;
+            string[] args = cmd.Split(' ');
+            switch (args[0])
+            {
+                case "r":
+                    {
+                        mStepMode = false;
+                        return;
+                    }
+                case "s":
+                    {
+                        mStepMode = true;
+                        return;
+                    }
+                case "b":
+                    {
+                        AddBreakPoint(int.Parse(args[1])); break;
+                    }
+                case "p":
+                    {
+                        PrintVariant(args[1]); break;
+                    }
+                case "l":
+                    {
+                        PrintCode();break;
+                    }
+                default:
+                    break;
+            }
+            WaitRun();
+        }
+
+        public void AddBreakPoint(int lineno)
+        {
+            if (!mBreakPoints.Contains(lineno))
+            {
+                mBreakPoints.Add(lineno);
+            }
+                
+            Console.WriteLine($"BreakPoint at {lineno} added.");
+        }
+        public void DelBreakPoint(int lineno)
+        {
+            mBreakPoints.Remove(lineno);
+            Console.WriteLine($"BreakPoint at {lineno} removed.");
+        }
+
+        public void PrintVariant(string varname)
+        {
+            Variant v = mCtx.LocalScope.GetVariant(varname);
+            if(v != null)
+            {
+                Console.WriteLine($"{varname}:{v}");
+            }
+        }
+
+        public void PrintCode(int n=10)
+        {
+            for(int i = 0; i < n; i++)
+            {
+                Console.WriteLine(mCtx.Code[mCtx.IP + i]);
+            }
+        }
     }
 
     class VM
     {
         Context ctx = new Context();
+        Debugger dbg;
+
+        public void AttachDebugger()
+        {
+            dbg = new Debugger(ctx);
+        }
 
         public void Visit(StatList tree)
         {
             Buildin.Print().OnVisit(ctx.Code);
             Buildin.Len().OnVisit(ctx.Code);
             tree.OnVisit(ctx.Code);
-            //ctx.GlobalScope.Merge(Env.GlobalScope);
+
+            for (int i = 0; i < ctx.Code.Count; i++)
+            {
+                Instruction ins = ctx.Code[i];
+                ins.CodeLine = i;
+            }
         }
 
         public void DumpInstructions()
         {
             StringBuilder sb = new StringBuilder();
-            for(int i=0;i<ctx.Code.Count;i++)
+            foreach(Instruction ins in ctx.Code)
             {
-                Instruction ins = ctx.Code[i];
-                sb.AppendLine($"{i,4:0}: {ins}");
+                sb.AppendLine(ins.ToString());
             }
             Console.WriteLine(sb.ToString());
         }
 
-        public void Exec()
+        public void Run()
         {
             ctx.LocalScope = ctx.GlobalScope;
+ 
+            dbg?.WaitRun();
+
             for (ctx.IP = 0; ctx.IP < ctx.Code.Count;)
             {
+                dbg?.BeforeStep();
                 Instruction ins = ctx.Code[ctx.IP];
                 if (ins.Op == OpCode.Halt)
                 {
@@ -353,7 +487,8 @@ namespace ToyCompiler
                             Variant b = ctx.Stack.Pop();
                             Variant a = ctx.Stack.Pop();
                             a.Assign(b);
-                            ctx.SP-=2;
+                            ctx.Stack.Push(a);
+                            ctx.SP--;
                             ctx.IP++;
                             break;
                         }
@@ -576,10 +711,23 @@ namespace ToyCompiler
                             ctx.IP++;
                             break;
                         }
+                    case OpCode.Clear:
+                        {
+                            while (ctx.Stack.Count > ctx.BP + 1)
+                            {
+                                ctx.Stack.Pop();
+                                ctx.SP--;
+                            }
+                            ctx.IP++;
+                            break;
+                        }
                     default:
                         break;
                 }
+                
+                dbg?.AfterStep(ins);
             }
+
         }
     }
 }
