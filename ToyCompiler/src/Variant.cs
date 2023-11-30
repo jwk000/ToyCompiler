@@ -61,16 +61,16 @@ namespace ToyCompiler
         {
             return variantType switch
             {
-                VariantType.Null => $"<null>{id}",
-                VariantType.Boolean => $"{id}:{bol}",
-                VariantType.Number => $"{id}:{num}",
-                VariantType.String => $"{id}:{str}",
-                VariantType.Array => $"<arr>{id}:{arr}",
-                VariantType.Object => $"<obj>{id}:{obj}",
-                VariantType.Label => $"<label>{id}:{label}",
-                VariantType.Function => $"<func>{id}:{fun.mFunID.desc}",
-                VariantType.Enum=>$"<enum>{id}",
-                VariantType.Scope=>$"<scope>{id}",
+                VariantType.Null => $"<null>",
+                VariantType.Boolean => $"{bol}",
+                VariantType.Number => $"{num}",
+                VariantType.String => $"{str}",
+                VariantType.Array => $"<arr>{arr}",
+                VariantType.Object => $"<obj>{obj}",
+                VariantType.Label => $"<label>{label}",
+                VariantType.Function => $"<func>{fun.mFunID.desc}",
+                VariantType.Enum=>$"<enum>",
+                VariantType.Scope=>$"<scope>",
                 _ => $"NotVariant"
             };
         }
