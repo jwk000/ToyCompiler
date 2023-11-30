@@ -2,7 +2,7 @@
   "profiles": {
     "ToyCompiler": {
       "commandName": "Project",
-      "commandLineArgs": "vm test-for.js d",
+      "commandLineArgs": "vm test-array.js d",
       "workingDirectory": "F:\\ToyCompiler\\ToyCompiler\\test"
     }
   }

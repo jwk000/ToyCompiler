@@ -17,7 +17,8 @@ namespace ToyCompiler
         Object,
         Function,
         Label,
-        Enum
+        Enum,
+        Scope
     }
 
     class Variant
@@ -29,6 +30,7 @@ namespace ToyCompiler
         public bool bol;
         public VArray arr;
         public VObject obj;
+        public Scope scope;
         public FunStat fun;
         public int label;//vm跳转用的label
         public IEnumerator enu;//对象迭代器
@@ -44,6 +46,7 @@ namespace ToyCompiler
             this.fun = w.fun;
             this.label = w.label;
             this.enu = w.enu;
+            this.scope = w.scope;
         }
 
         public Variant Clone()
@@ -58,15 +61,16 @@ namespace ToyCompiler
         {
             return variantType switch
             {
-                VariantType.Null => $"null",
-                VariantType.Boolean => $"{bol}",
-                VariantType.Number => $"{num}",
-                VariantType.String => $"{str}",
-                VariantType.Array => $"{arr}",
-                VariantType.Object => $"{obj}",
-                VariantType.Function => $"{fun.mFunID.desc}",
-                VariantType.Label => $"{label}",
-                VariantType.Enum=>$"enumerator",
+                VariantType.Null => $"<null>{id}",
+                VariantType.Boolean => $"{id}:{bol}",
+                VariantType.Number => $"{id}:{num}",
+                VariantType.String => $"{id}:{str}",
+                VariantType.Array => $"<arr>{id}:{arr}",
+                VariantType.Object => $"<obj>{id}:{obj}",
+                VariantType.Label => $"<label>{id}:{label}",
+                VariantType.Function => $"<func>{id}:{fun.mFunID.desc}",
+                VariantType.Enum=>$"<enum>{id}",
+                VariantType.Scope=>$"<scope>{id}",
                 _ => $"NotVariant"
             };
         }
@@ -87,7 +91,18 @@ namespace ToyCompiler
         {
             return new Variant { variantType = VariantType.Boolean, bol = b };
         }
-
+        public static implicit operator Variant(VArray a)
+        {
+            return new Variant { variantType = VariantType.Array, arr = a };
+        }
+        public static implicit operator Variant(VObject o)
+        {
+            return new Variant { variantType = VariantType.Object, obj = o };
+        }
+        public static implicit operator Variant(Scope s)
+        {
+            return new Variant { variantType = VariantType.Scope, scope = s };
+        }
 
         public static explicit operator double(Variant v)
         {
@@ -116,6 +131,33 @@ namespace ToyCompiler
                 return v.bol;
             }
             throw new InvalidCastException("variant is not boolean");
+        }
+
+        public static explicit operator VArray (Variant v)
+        {
+            if(v.variantType == VariantType.Array)
+            {
+                return v.arr;
+            }
+            throw new InvalidCastException("variant is not array");
+        }
+
+        public static explicit operator VObject(Variant v)
+        {
+            if (v.variantType == VariantType.Object)
+            {
+                return v.obj;
+            }
+            throw new InvalidCastException("variant is not object");
+        }
+
+        public static explicit operator Scope(Variant v)
+        {
+            if (v.variantType == VariantType.Scope)
+            {
+                return v.scope;
+            }
+            throw new InvalidCastException("variant is not scope");
         }
 
         //重载true和false和&可以用&&操作
@@ -467,15 +509,16 @@ namespace ToyCompiler
             return mArray.GetEnumerator();
         }
 
+        public void Reverse()
+        {
+            mArray.Reverse();
+        }
+
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
             sb.Append('[');
-            foreach (var v in mArray)
-            {
-                sb.Append(v).Append(',');
-            }
-            sb.Length--;
+            sb.AppendJoin(',', mArray);
             sb.Append(']');
             return sb.ToString();
         }
@@ -577,6 +620,24 @@ namespace ToyCompiler
             {
                 SetVariant(v);
             }
+        }
+
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{");
+            foreach(var kv in mVarDict)
+            {
+                sb.AppendFormat("{0}:{1} ", kv.Key, kv.Value);
+            }
+            sb.Append("}");
+            if(mUpScope != null)
+            {
+                sb.Append(" up:");
+                sb.Append(mUpScope.ToString());
+            }
+            sb.AppendLine();
+            return sb.ToString();
         }
     }
 }

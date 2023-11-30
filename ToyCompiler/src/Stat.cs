@@ -510,8 +510,12 @@ class ForStat : IStat
             mForinExp.OnVisit(code);
             //需要保证栈顶是exp返回的对象或数组
             //迭代器添加的两个变量压栈
-            code.Add(new Instruction(OpCode.Push) { OpVar = mForinExp.mParams[0].desc });
-            code.Add(new Instruction(OpCode.Push) { OpVar = mForinExp.mParams[1].desc });
+            Variant key = new Variant();
+            key.id = mForinExp.mParams[0].desc;
+            code.Add(new Instruction(OpCode.Push) { OpVar = key });
+            Variant val = new Variant();
+            val.id = mForinExp.mParams[1].desc;
+            code.Add(new Instruction(OpCode.Push) { OpVar = val });
             //迭代器
             code.Add(new Instruction(OpCode.Enum));
             //循环起点
@@ -521,19 +525,15 @@ class ForStat : IStat
             Instruction bjump = new Instruction(OpCode.Jump);
             JumpLabel jumplabel = new JumpLabel(cjump, bjump);
             Instruction.JumpLabels.Push(jumplabel);
-
+            //通过next指令迭代
             Instruction next = new Instruction(OpCode.Next);
             code.Add(next);
             mStat.OnVisit(code);
-            //迭代器添加的两个变量出栈
-            code.Add(new Instruction(OpCode.Pop));
-            code.Add(new Instruction(OpCode.Pop));
+
             code.Add(cjump);
             next.OpInt = code.Count;//next完成后跳转到后面的指令
             njump.OpInt = code.Count;
             bjump.OpInt = code.Count;
-            //清除exp返回值
-            code.Add(new Instruction(OpCode.Pop));
             //支持多级break
             Instruction.JumpLabels.Pop();
         }

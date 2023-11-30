@@ -391,7 +391,6 @@ class ForInExp : IExp
     public void OnVisit(List<Instruction> code)
     {
         mExp.OnVisit(code);
-        code.Add(new Instruction(OpCode.Enum));
     }
 
     public bool Next()
@@ -659,9 +658,9 @@ class PostfixExp : IExp
 {
     public PrimExp prim;//当前exp
     public PostfixType postfixType = PostfixType.None;
-    public Token pointID;//obj.后面的东西
-    public List<Exp> args;//func(里面的东西)
-    public Exp index;//arr[下标]
+    public Token dotToken;//obj.后面的东西
+    public List<Exp> funArgs;//func(里面的东西)
+    public Exp indexExp;//arr[下标]
     public PostfixExp next;//多级后缀
     public bool first = true;
 
@@ -696,7 +695,7 @@ class PostfixExp : IExp
                 if (ts.Count > 0)
                 {
                     TokenReader tr = new TokenReader(ts);
-                    args = new List<Exp>();
+                    funArgs = new List<Exp>();
                     while (!tr.IsEnd())
                     {
 
@@ -705,7 +704,7 @@ class PostfixExp : IExp
                         {
                             return false;
                         }
-                        args.Add(exp);
+                        funArgs.Add(exp);
                         Token nt = tr.Next();
                         if (nt == null)
                         {
@@ -728,8 +727,8 @@ class PostfixExp : IExp
                 {
                     return false;
                 }
-                index = new Exp();
-                index.Parse(ts);
+                indexExp = new Exp();
+                indexExp.Parse(ts);
             }
             else if (t.tokenType == TokenType.TTDot) //.
             {
@@ -740,7 +739,7 @@ class PostfixExp : IExp
                 {
                     return false;
                 }
-                pointID = t;
+                dotToken = t;
             }
             else //遇到不识别的后缀就结束判定，交给上层处理
             {
@@ -818,7 +817,7 @@ class PostfixExp : IExp
             {
                 var stat = f.fun;
                 //参数压栈
-                foreach (var exp in p.args)
+                foreach (var exp in p.funArgs)
                 {
                     Env.RunStack.Add(exp.Calc());
                 }
@@ -847,7 +846,7 @@ class PostfixExp : IExp
                 throw new Exception($"invalid array index {v.id}");
             }
             VArray arr = va.arr;
-            return arr.GetAt((int)(double)p.index.Calc());
+            return arr.GetAt((int)(double)p.indexExp.Calc());
         }
         else if (p.postfixType == PostfixType.Point)//object
         {
@@ -857,7 +856,7 @@ class PostfixExp : IExp
                 throw new Exception($"invalid object access {v.id}");
             }
             VObject obj = va.obj;
-            return obj.Get(p.pointID.desc);
+            return obj.Get(p.dotToken.desc);
         }
         else
         {
@@ -903,12 +902,12 @@ class PostfixExp : IExp
         {
             //栈：函数变量，参数列表，参数数量，返回地址
             //参数压栈
-            foreach (var exp in args)
+            foreach (var exp in funArgs)
             {
                 exp.OnVisit(code);
             }
             //参数数量
-            code.Add(new Instruction(OpCode.Push) { OpVar = args.Count });
+            code.Add(new Instruction(OpCode.Push) { OpVar = funArgs.Count });
             //返回地址
             code.Add(new Instruction(OpCode.Push) { OpVar = code.Count +2});
             //调用就是跳转
@@ -917,11 +916,12 @@ class PostfixExp : IExp
 
         else if (postfixType == PostfixType.Index)//array
         {
+            indexExp.OnVisit(code);
             code.Add(new Instruction(OpCode.Index));
         }
         else if (postfixType == PostfixType.Point)//object
         {
-            code.Add(new Instruction(OpCode.Dot));
+            code.Add(new Instruction(OpCode.Dot) { OpStr=dotToken.desc});
         }
 
     }
@@ -1619,9 +1619,6 @@ class ArrayExp : IExp
 
     public void OnVisit(List<Instruction> code)
     {
-        Variant v = new Variant();
-        v.variantType = VariantType.Array;
-
         if (args != null)
         {
             foreach (var exp in args)
@@ -1629,7 +1626,6 @@ class ArrayExp : IExp
                 exp.OnVisit(code);
             }
         }
-        code.Add(new Instruction(OpCode.Push) { OpVar = v });
         code.Add(new Instruction(OpCode.NewArray) { OpInt = args.Count });
     }
 }
@@ -1706,14 +1702,11 @@ class ObjectExp : IExp
 
     public void OnVisit(List<Instruction> code)
     {
-        Variant v = new Variant();
-        v.variantType = VariantType.Object;
         foreach (var kv in kvs)
         {
             code.Add(new Instruction(OpCode.Push) { OpVar = kv.Key });
             kv.Value.OnVisit(code);
         }
-        code.Add(new Instruction(OpCode.Push) { OpVar = v });
         code.Add(new Instruction(OpCode.NewObj) { OpInt=kvs.Count});
     }
 }

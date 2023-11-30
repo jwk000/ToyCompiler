@@ -217,6 +217,14 @@ namespace ToyCompiler
                     {
                         PrintCode();break;
                     }
+                case "sc":
+                    {
+                        PrintScope();break;
+                    }
+                case "bt":
+                    {
+                        PrintCallStack();break;
+                    }
                 default:
                     break;
             }
@@ -252,6 +260,23 @@ namespace ToyCompiler
             for(int i = 0; i < n; i++)
             {
                 Console.WriteLine(mCtx.Code[mCtx.IP + i]);
+            }
+        }
+
+        public void PrintScope()
+        {
+            Console.WriteLine(mCtx.LocalScope);
+        }
+
+        public void PrintCallStack()
+        {
+            //逆序遍历栈，寻找bp和函数变量
+            int bp = mCtx.BP;
+            while (bp > 0)
+            {
+                bp = (int)mCtx.Stack[bp].num;
+                Variant f = mCtx.Stack[bp+1];
+                Console.WriteLine(f);//todo 发起调用的行
             }
         }
     }
@@ -494,9 +519,11 @@ namespace ToyCompiler
                         }
                     case OpCode.Index:
                         {
-                            Variant v = ctx.Stack.Pop();
-                            Variant u = v.arr.GetAt(ins.OpInt);
+                            Variant x = ctx.Stack.Pop();//下标
+                            Variant v = ctx.Stack.Pop();//数组
+                            Variant u = v.arr.GetAt((int)x.num);
                             ctx.Stack.Push(u);
+                            ctx.SP--;
                             ctx.IP++;
                             break;
                         }
@@ -510,31 +537,33 @@ namespace ToyCompiler
                         }
                     case OpCode.NewArray:
                         {//栈顶是变量名，下面是元素个数，下面是元素，依次出栈构造变量写入作用域
-                            Variant vArr = ctx.Stack.Pop();
-                            Variant vNum = ctx.Stack.Pop();
+                            
+                            Variant vArr = new Variant();
+                            vArr.variantType = VariantType.Array;
                             vArr.arr = new VArray();
-                            for (int n = 0; n < vNum.num; n++)
+                            for (int n = 0; n < ins.OpInt; n++)
                             {
                                 vArr.arr.Add(ctx.Stack.Pop());
                             }
-                            ctx.LocalScope.SetVariant(vArr);
+                            vArr.arr.Reverse();
                             ctx.Stack.Push(vArr);
-                            ctx.SP -= (int)vNum.num + 2;
+                            ctx.SP -= ins.OpInt-1;
                             ctx.IP++;
                             break;
                         }
                     case OpCode.NewObj:
                         {//栈顶是变量名，下面是元素个数，下面是元素，依次出栈构造变量写入作用域
-                            Variant vObj = ctx.Stack.Pop();
-                            Variant vNum = ctx.Stack.Pop();
+                            Variant vObj = new Variant();
+                            vObj.variantType = VariantType.Object;
                             vObj.obj = new VObject();
-                            for (int n = 0; n < vNum.num; n++)
+                            for (int n = 0; n < ins.OpInt; n++)
                             {
-                                vObj.obj.Add(ctx.Stack.Pop().str, ctx.Stack.Pop());
+                                var val = ctx.Stack.Pop();
+                                var key = ctx.Stack.Pop();
+                                vObj.obj.Add(key.str,val);
                             }
-                            ctx.LocalScope.SetVariant(vObj);
                             ctx.Stack.Push(vObj);
-                            ctx.SP -= (int)vNum.num * 2 + 2;
+                            ctx.SP -= ins.OpInt * 2 -1;
                             ctx.IP++;
                             break;
                         }
@@ -546,6 +575,7 @@ namespace ToyCompiler
                             Variant obj = ctx.Stack.Peek(3);
                             Variant e = new Variant();
                             e.variantType = VariantType.Enum;
+                            e.id = "e";
                             if (obj.variantType == VariantType.Array)
                             {
                                 e.enu = obj.arr.GetEnumerator();
@@ -553,24 +583,31 @@ namespace ToyCompiler
                                 key.variantType = VariantType.Number;
                                 key.num = 0;
                                 ctx.LocalScope.SetVariant(key);
+                                ctx.LocalScope.SetVariant(val);
                             }
                             else if (obj.variantType == VariantType.Object)
                             {
                                 e.enu = obj.obj.GetEnumerator();
                                 //key
                                 key.variantType = VariantType.String;
+                                key.str = "-";
                                 ctx.LocalScope.SetVariant(key);
+                                ctx.LocalScope.SetVariant(val);
                             }
                             ctx.Stack.Push(e);
+                            ctx.Stack.Push(ctx.BP);
+                            ctx.SP+=2;
+                            ctx.BP = ctx.SP;//新的栈帧，迭代器完成后还原栈帧
                             ctx.IP++;
                             break;
                         }
                     case OpCode.Next:
                         {
-                            //栈:obj，k，v，enu
-                            Variant e = ctx.Stack.Peek(1);
-                            Variant v = ctx.Stack.Peek(2);
-                            Variant k = ctx.Stack.Peek(3);
+                            //栈:obj，k，v，enu，bp
+                            //Variant b = ctx.Stack.Peek(1);
+                            Variant e = ctx.Stack.Peek(2);
+                            Variant v = ctx.Stack.Peek(3);
+                            Variant k = ctx.Stack.Peek(4);
                             if (e.enu.MoveNext())
                             {
                                 if (k.variantType == VariantType.Number)
@@ -589,11 +626,12 @@ namespace ToyCompiler
                             else
                             {
                                 //清理栈，跳转
+                                ctx.BP = (int)ctx.Stack.Pop();
                                 ctx.Stack.Pop();
                                 ctx.Stack.Pop();
                                 ctx.Stack.Pop();
                                 ctx.Stack.Pop();
-                                ctx.SP -= 4;
+                                ctx.SP -= 5;
                                 ctx.IP = ins.OpInt;
                             }
                             break;
@@ -645,20 +683,23 @@ namespace ToyCompiler
                         }
                     case OpCode.Call:
                         {
-                            //栈：函数变量，参数列表，参数数量，返回地址，BP
+                            //栈：函数变量，参数列表，参数数量，返回地址，作用域，BP
+                            ctx.Stack.Push(ctx.LocalScope);
                             ctx.Stack.Push(ctx.BP);
-                            ctx.SP++;
+                            ctx.SP+=2;
                             ctx.BP = ctx.SP;
+
+                            //新的作用域写入参数
                             Scope scope = new Scope();
                             scope.SetUpScope(ctx.GlobalScope);
                             ctx.LocalScope = scope;
-                            int argNum = (int)ctx.Stack.Peek(3);
-                            Variant func = ctx.Stack.Peek(4 + argNum);
+                            int argNum = (int)ctx.Stack.Peek(4);
+                            Variant func = ctx.Stack.Peek(5 + argNum);
                             for(int i = 0; i < argNum; i++)
                             {
                                 Variant v = new Variant();
                                 v.id = func.fun.mParams[i].desc;
-                                v.Assign(ctx.Stack.Peek(3 + argNum - i));
+                                v.Assign(ctx.Stack.Peek(4 + argNum - i));
                                 scope.SetVariant(v);
                             }
                             ctx.IP = func.label;
@@ -667,13 +708,15 @@ namespace ToyCompiler
                         }
                     case OpCode.Ret:
                         {
-                            //栈上保留的都是返回值
+                            //栈：函数变量，参数列表，参数数量，返回地址，作用域，BP，返回值
+                            //返回值暂存
                             List<Variant> rets = new List<Variant>();
                             while (ctx.Stack.Count > ctx.BP+1)
                             {
                                 rets.Add(ctx.Stack.Pop());
                             }
-                            ctx.BP = (int)ctx.Stack.Pop();//上层BP出栈
+                            ctx.BP = (int)ctx.Stack.Pop();//上级BP
+                            ctx.LocalScope = (Scope)ctx.Stack.Pop();//上级作用域
                             ctx.IP = (int)ctx.Stack.Pop();//返回地址出栈
                             int argNum = (int)ctx.Stack.Pop();//参数数量出栈
                             for (int i = 0; i < argNum; i++)
@@ -687,15 +730,16 @@ namespace ToyCompiler
                                 ctx.Stack.Push(rets[i]);
                             }
                             
-                            ctx.SP -= 4 + argNum;
+                            ctx.SP -= 5 + argNum;
                             break;
                         }
                     case OpCode.Print:
                         {
-                            int argNum = (int)ctx.Stack.Peek(3);
+                            //栈：函数变量，参数列表，参数数量，返回地址，作用域，BP
+                            int argNum = (int)ctx.Stack.Peek(4);
                             for (int i = 0; i < argNum; i++)
                             {
-                                Variant v = ctx.Stack.Peek(3 + argNum - i);
+                                Variant v = ctx.Stack.Peek(4 + argNum - i);
                                 Console.Write($"{v}\t");
                             }
                             Console.WriteLine();
@@ -704,7 +748,8 @@ namespace ToyCompiler
                         }
                     case OpCode.Len:
                         {
-                            Variant v = ctx.Stack.Peek(4);
+                            //栈：函数变量，参数列表，参数数量，返回地址，作用域，BP
+                            Variant v = ctx.Stack.Peek(5);
                             Variant r = v.arr.Length();
                             ctx.Stack.Push(r);
                             ctx.SP++;
@@ -713,6 +758,7 @@ namespace ToyCompiler
                         }
                     case OpCode.Clear:
                         {
+                            //清理栈帧，每条语句执行后栈帧应该是空的
                             while (ctx.Stack.Count > ctx.BP + 1)
                             {
                                 ctx.Stack.Pop();
