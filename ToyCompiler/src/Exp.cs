@@ -866,7 +866,7 @@ class PostfixExp : IExp
 
     public void OnVisit(List<Instruction> code)
     {
-        prim.OnVisit(code);
+        if(first) prim.OnVisit(code);
         if (postfixType == PostfixType.None)
         {
             return;
