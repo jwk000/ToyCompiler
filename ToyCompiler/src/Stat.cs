@@ -44,7 +44,7 @@ interface IStat
     void OnVisit(List<Instruction> code);
 }
 
-class StatList : IStat
+class StatTree : IStat
 {
     public List<IStat> mStatList = new List<IStat>();
 

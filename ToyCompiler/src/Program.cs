@@ -32,7 +32,7 @@ namespace ToyCompiler
 
             //语法分析
             TokenReader tokenReader = new TokenReader(lexer.mTokenList);
-            StatList tree = new StatList();
+            StatTree tree = new StatTree();
             if (!tree.Parse(tokenReader))
             {
                 Console.WriteLine("stat parse failed!");

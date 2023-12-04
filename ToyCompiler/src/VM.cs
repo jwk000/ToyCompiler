@@ -291,7 +291,7 @@ namespace ToyCompiler
             dbg = new Debugger(ctx);
         }
 
-        public void Visit(StatList tree)
+        public void Visit(StatTree tree)
         {
             Buildin.Print().OnVisit(ctx.Code);
             Buildin.Len().OnVisit(ctx.Code);
