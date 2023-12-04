@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.SymbolStore;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -312,6 +313,49 @@ namespace ToyCompiler
                 sb.AppendLine(ins.ToString());
             }
             Console.WriteLine(sb.ToString());
+        }
+
+        //idx从0开始
+        public double API_ToNumber(int idx)
+        {
+            int argNum = (int)ctx.Stack.Peek(4);
+            Variant v = ctx.Stack.Peek(4+argNum-idx);
+            return (double)v;
+        }
+
+        public string API_ToString(int idx)
+        {
+            int argNum = (int)ctx.Stack.Peek(4);
+            Variant v = ctx.Stack.Peek(4 + argNum - idx);
+            return (string)v;
+        }
+
+        public bool API_ToBoolean(int idx)
+        {
+            int argNum = (int)ctx.Stack.Peek(4);
+            Variant v = ctx.Stack.Peek(4 + argNum - idx);
+            return (bool)v;
+        }
+
+        public void API_PushNumber(double d)
+        {
+            ctx.Stack.Push(d);
+        }
+
+        public void API_PushString(string s)
+        {
+            ctx.Stack.Push(s);
+        }
+
+        public void API_PushBoolean(bool b)
+        {
+            ctx.Stack.Push(b);
+        }
+
+        public int API_GetArgCount()
+        {
+            int argNum = (int)ctx.Stack.Peek(4);
+            return argNum;
         }
 
         public void Run()

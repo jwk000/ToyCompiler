@@ -75,5 +75,27 @@ namespace ToyCompiler
             return len;
         }
 
+        public static int fib(int n)
+        {
+            if (n < 0) return 0;
+            if (n < 3) return n;
+            return fib(n - 1) + fib(n - 2);
+        }
+
+        public static int FFibnacci(VM vm)
+        {
+            //从栈上获取参数
+            int n = (int)vm.API_ToNumber(0);//参数用参数栈
+            int r = fib(n);
+            vm.API_PushNumber(r);//push 用返回值栈
+            return 1;//返回值数量
+        }
+
+        public static void CallFib(VM vm)
+        {
+            vm.API_PushNumber(10);
+            int n = vm.API_Call("fib");
+
+        }
     }
 }
