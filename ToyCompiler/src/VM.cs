@@ -282,8 +282,12 @@ namespace ToyCompiler
         }
     }
 
-    class VM
+    //js调用cs的函数
+    public delegate int APIDelegate(VM vm);
+
+    public class VM
     {
+        StatTree tree = new StatTree();
         Context ctx = new Context();
         Debugger dbg;
 
@@ -292,11 +296,52 @@ namespace ToyCompiler
             dbg = new Debugger(ctx);
         }
 
-        public void Visit(StatTree tree)
+        public bool Parse(string script)
         {
-            Buildin.Print().OnVisit(ctx.Code);
-            Buildin.Len().OnVisit(ctx.Code);
-            tree.OnVisit(ctx.Code);
+            //词法分析
+            Lexer lexer = new Lexer();
+            if (!lexer.ParseToken(script))
+            {
+                Console.WriteLine("lexer parse failed!");
+                Console.WriteLine(lexer.ShowTokens());
+                return false;
+            }
+            Console.WriteLine("lexer parse success!");
+
+            //语法分析
+            TokenReader tokenReader = new TokenReader(lexer.mTokenList);
+            
+            if (!tree.Parse(tokenReader))
+            {
+                Console.WriteLine("stat parse failed!");
+                return false;
+            }
+            Console.WriteLine("stat parse success!");
+            return true;
+        }
+
+        public void Exec(string script)
+        {
+            if (Parse(script))
+            {
+                Env.RegisterBuildinFunctions();
+                tree.Exec(Env.GlobalScope);
+            }
+        }
+
+        public void Compile(string script)
+        {
+            if (Parse(script))
+            {
+                Visit(tree);
+            }
+        }
+
+        void Visit(StatTree tree=null)
+        {
+            Interaction.Print().OnVisit(ctx.Code);
+            Interaction.Len().OnVisit(ctx.Code);
+            tree?.OnVisit(ctx.Code);
 
             for (int i = 0; i < ctx.Code.Count; i++)
             {
@@ -315,56 +360,14 @@ namespace ToyCompiler
             Console.WriteLine(sb.ToString());
         }
 
-        //idx从0开始
-        public double API_ToNumber(int idx)
-        {
-            int argNum = (int)ctx.Stack.Peek(4);
-            Variant v = ctx.Stack.Peek(4+argNum-idx);
-            return (double)v;
-        }
 
-        public string API_ToString(int idx)
-        {
-            int argNum = (int)ctx.Stack.Peek(4);
-            Variant v = ctx.Stack.Peek(4 + argNum - idx);
-            return (string)v;
-        }
-
-        public bool API_ToBoolean(int idx)
-        {
-            int argNum = (int)ctx.Stack.Peek(4);
-            Variant v = ctx.Stack.Peek(4 + argNum - idx);
-            return (bool)v;
-        }
-
-        public void API_PushNumber(double d)
-        {
-            ctx.Stack.Push(d);
-        }
-
-        public void API_PushString(string s)
-        {
-            ctx.Stack.Push(s);
-        }
-
-        public void API_PushBoolean(bool b)
-        {
-            ctx.Stack.Push(b);
-        }
-
-        public int API_GetArgCount()
-        {
-            int argNum = (int)ctx.Stack.Peek(4);
-            return argNum;
-        }
-
-        public void Run()
+        public void Run(int label =0)
         {
             ctx.LocalScope = ctx.GlobalScope;
  
             dbg?.WaitRun();
 
-            for (ctx.IP = 0; ctx.IP < ctx.Code.Count;)
+            for (ctx.IP = label; ctx.IP < ctx.Code.Count;)
             {
                 dbg?.BeforeStep();
                 Instruction ins = ctx.Code[ctx.IP];
@@ -773,8 +776,8 @@ namespace ToyCompiler
                             {
                                 ctx.Stack.Push(rets[i]);
                             }
-                            
                             ctx.SP -= 5 + argNum;
+                            //栈：返回值
                             break;
                         }
                     case OpCode.Print:
@@ -819,5 +822,172 @@ namespace ToyCompiler
             }
 
         }
+
+        //read-eval-print-loop
+        public void REPL()
+        {
+            //可以直接输出表达式的值
+            //可以定义变量和函数
+            //可以换行输入，检测语法完整结束输入
+            //可以用上下箭头查看历史记录
+            //按esc退出
+
+            List<string> cmdHistory = new List<string>();
+            int historyIndex = -1;
+
+            while (true)
+            {
+                Console.Write(">");
+                ConsoleKeyInfo keyInfo = Console.ReadKey(true);
+                if(keyInfo.Key == ConsoleKey.Escape)
+                {
+                    break;
+                }
+                if(keyInfo.Key == ConsoleKey.Enter)
+                {
+                    string code = Console.ReadLine();
+                    if (string.IsNullOrEmpty(code))
+                    {
+                        continue;
+                    }
+                    cmdHistory.Add(code);
+                    historyIndex = cmdHistory.Count - 1;
+                }
+                else if(keyInfo.Key == ConsoleKey.UpArrow)
+                {
+                    if (historyIndex >= 0)
+                    {
+                        Console.SetCursorPosition(0, Console.CursorTop);
+                        Console.Write(new string(' ', Console.WindowWidth)); // 清空当前行
+                        Console.SetCursorPosition(0, Console.CursorTop);
+
+                        Console.Write(cmdHistory[historyIndex]);
+                        historyIndex = Math.Max(0, historyIndex - 1);
+                    }
+                }
+                else if(keyInfo.Key == ConsoleKey.DownArrow)
+                {
+                    if (historyIndex < cmdHistory.Count - 1)
+                    {
+                        Console.SetCursorPosition(0, Console.CursorTop);
+                        Console.Write(new string(' ', Console.WindowWidth)); // 清空当前行
+                        Console.SetCursorPosition(0, Console.CursorTop);
+
+                        historyIndex = Math.Min(cmdHistory.Count - 1, historyIndex + 1);
+                        Console.Write(cmdHistory[historyIndex]);
+                    }
+                    else if (historyIndex == cmdHistory.Count - 1)
+                    {
+                        // 用户达到历史记录的末尾，清空当前行
+                        Console.SetCursorPosition(0, Console.CursorTop);
+                        Console.Write(new string(' ', Console.WindowWidth));
+                        Console.SetCursorPosition(0, Console.CursorTop);
+                    }
+                }
+            }
+        }
+        
+        public void TestInteraction()
+        {
+            //cs 调用 js
+            string code = "function fib(n) {if(n<3){return n;} return fib(n-1)+fib(n-2);}" +
+                "print(\"js call cs fib(5)=\", csfib(5));";
+
+            RegFunc(Interaction.JsCallCs_Fibonacci, "csfib");
+            Parse(code);
+            Visit(tree);
+            Run();
+            Interaction.CsCallJs_Fibonacci(this);
+        }
+
+        #region API
+
+        public void RegFunc(APIDelegate api, string name)
+        {
+            Variant f = new Variant();
+            f.variantType = VariantType.Function;
+            f.id = name;
+            f.api = api;
+            ctx.GlobalScope.SetVariant(f);
+        }
+
+        //idx从0开始
+        public double API_ToNumber(int idx)
+        {
+            int argNum = (int)ctx.Stack.Peek(4);
+            Variant v = ctx.Stack.Peek(4 + argNum - idx);
+            return (double)v;
+        }
+
+        public string API_ToString(int idx)
+        {
+            int argNum = (int)ctx.Stack.Peek(4);
+            Variant v = ctx.Stack.Peek(4 + argNum - idx);
+            return (string)v;
+        }
+
+        public bool API_ToBoolean(int idx)
+        {
+            int argNum = (int)ctx.Stack.Peek(4);
+            Variant v = ctx.Stack.Peek(4 + argNum - idx);
+            return (bool)v;
+        }
+
+        public void API_PushNumber(double d)
+        {
+            ctx.Stack.Push(d);
+        }
+
+        public void API_PushString(string s)
+        {
+            ctx.Stack.Push(s);
+        }
+
+        public void API_PushBoolean(bool b)
+        {
+            ctx.Stack.Push(b);
+        }
+
+        public int API_GetArgCount()
+        {
+            int argNum = (int)ctx.Stack.Peek(4);
+            return argNum;
+        }
+
+        public int API_Call(string name, params object[] args)
+        {
+            Variant f = ctx.LocalScope.GetVariant(name);
+            if (f.variantType == VariantType.Function)
+            {
+                ctx.Stack.Push(f);
+                foreach (Variant v2 in args)
+                {
+                    ctx.Stack.Push(v2);
+                }
+                ctx.Stack.Push(args.Length);
+                ctx.Stack.Push(ctx.Code.Count);//返回地址
+                ctx.Stack.Push(ctx.LocalScope);
+                ctx.Stack.Push(ctx.BP);
+                ctx.SP += 4 + args.Length;
+                ctx.BP = ctx.SP;
+                Scope scope = new Scope();
+                scope.SetUpScope(ctx.GlobalScope);
+                ctx.LocalScope = scope;
+                for (int i = 0; i < args.Length; i++)
+                {
+                    Variant v = new Variant();
+                    v.id = f.fun.mParams[i].desc;
+                    v.Assign(args[i] as Variant);
+                    scope.SetVariant(v);
+                }
+                ctx.IP = f.label;
+                Run(f.label);
+                //此时栈上应该只有返回值了
+                return ctx.Stack.Count;
+            }
+            return -1;
+        }
+
+        #endregion
     }
 }

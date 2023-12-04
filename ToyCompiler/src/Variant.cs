@@ -31,8 +31,9 @@ namespace ToyCompiler
         public VArray arr;
         public VObject obj;
         public Scope scope;
-        public FunStat fun;
-        public int label;//vm跳转用的label
+        public FunStat fun; //js实现的函数
+        public APIDelegate api;//cs实现的函数
+        public int label;//vm层的函数：vm跳转用的label
         public IEnumerator enu;//对象迭代器
 
         public void Assign(Variant w)//赋值不包含id

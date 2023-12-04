@@ -15,8 +15,8 @@ namespace ToyCompiler
 
         public static void RegisterBuildinFunctions()
         {
-            RegFun(Buildin.Print());
-            RegFun(Buildin.Len());
+            RegFun(Interaction.Print());
+            RegFun(Interaction.Len());
 
         }
 

@@ -7,54 +7,59 @@ namespace ToyCompiler
 {
     class Program
     {
-        //tc file.js vm/tr
+        //tc -e file.js 解释器模式
+        //tc -v file.js 虚拟机模式
+        //tc -d file.js 调试器模式
+        //tc -c file.js 编译器模式
+        //tc -i 交互模式
+        //tc -t testcase 运行测试用例
         static void Main(string[] args)
         {
-            string runtype = args[0];
-            string filename = args[1];
-            bool debug = false;
-            if(args.Length> 2)
-            {
-                debug = args[2] == "d";
-            }
+            string runMode = args[0];
 
-            string script = File.ReadAllText(filename);
+            VM vm = new VM();
 
-            //词法分析
-            Lexer lexer = new Lexer();
-            if (!lexer.ParseToken(script))
-            {
-                Console.WriteLine("lexer parse failed!");
-                Console.WriteLine(lexer.ShowTokens());
-                return;
-            }
-            Console.WriteLine("lexer parse success!");
-
-            //语法分析
-            TokenReader tokenReader = new TokenReader(lexer.mTokenList);
-            StatTree tree = new StatTree();
-            if (!tree.Parse(tokenReader))
-            {
-                Console.WriteLine("stat parse failed!");
-                return;
-            }
-            Console.WriteLine("stat parse success!");
-
-            //执行
-            if(runtype == "tr")
+            if (runMode == "-e")
             {
                 //直接解释执行
-                Env.RegisterBuildinFunctions();
-                tree.Exec(Env.GlobalScope);
+                string script = File.ReadAllText(args[1]);
+                vm.Exec(script);
             }
-            else if(runtype == "vm")
+            else if (runMode == "-v")
             {
                 //编译成指令执行
-                VM vm = new VM();
-                vm.Visit(tree);
-                vm.DumpInstructions();
-                vm.AttachDebugger();
+                string script = File.ReadAllText(args[1]);
+                vm.Compile(script);
                 vm.Run();
+            }
+            else if (runMode == "-d")
+            {
+                //带调试器执行指令
+                string script = File.ReadAllText(args[1]);
+                vm.AttachDebugger();
+                vm.Compile(script);
+                vm.Run();
+            }
+            else if (runMode == "-c")
+            {
+                //编译成指令执行
+                string script = File.ReadAllText(args[1]);
+                vm.Compile(script);
+                vm.DumpInstructions();
+            }
+            else if (runMode == "-i")
+            {
+                //交互式执行
+                vm.REPL();
+            }
+            else if(runMode == "-t")
+            {
+                //测试用例
+                string testcase = args[1];
+                if (testcase == "interact")
+                {
+                    vm.TestInteraction();
+                }
             }
             Console.WriteLine("press any key to exit...");
             Console.Read();
