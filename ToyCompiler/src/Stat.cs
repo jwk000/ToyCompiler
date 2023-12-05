@@ -39,14 +39,31 @@ enum StatCtrl
 
 interface IStat
 {
-    StatCtrl Exec(Scope scope);
     bool Parse(TokenReader tokenReader);
-    void OnVisit(List<Instruction> code);
+    StatCtrl Exec(Scope scope);
+    void Visit(List<Instruction> code);
 }
 
 class StatTree : IStat
 {
     public List<IStat> mStatList = new List<IStat>();
+
+    public bool Parse(TokenReader tokenReader)
+    {
+        while (!tokenReader.IsEnd())
+        {
+            Stat stat = new Stat();
+            if (stat.Parse(tokenReader))
+            {
+                mStatList.Add(stat);
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 
     public StatCtrl Exec(Scope scope)
     {
@@ -62,32 +79,14 @@ class StatTree : IStat
         return StatCtrl.None;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         foreach (var stat in mStatList)
         {
-            stat.OnVisit(code);
+            stat.Visit(code);
         }
         //添加一个停机指令
         code.Add(new Instruction(OpCode.Halt));
-    }
-
-    public bool Parse(TokenReader tokenReader)
-    {
-        while (!tokenReader.IsEnd())
-        {
-            Stat stat = new Stat();
-            if (stat.Parse(tokenReader))
-            {
-                mStatList.Add(stat);
-            }
-            else
-            {
-                return false;
-            }
-
-        }
-        return true;
     }
 }
 
@@ -101,52 +100,7 @@ class Stat : IStat
     public ForStat mForStat;
     public JumpStat mJumpStat;
     public FunStat mFunStat;
-    public StatCtrl Exec(Scope scope)
-    {
-        switch (mStatType)
-        {
-            case StatType.StatCompound:
-                return mCompundStat.Exec(scope);
-            case StatType.StatExp:
-                return mExpStat.Exec(scope);
-            case StatType.StatFor:
-                return mForStat.Exec(scope);
-            case StatType.StatIf:
-                return mIfStat.Exec(scope);
-            case StatType.StatWhile:
-                return mWhileStat.Exec(scope);
-            case StatType.StatJump:
-                return mJumpStat.Exec(scope);
-            case StatType.StatFun:
-                return mFunStat.Exec(scope);
-            default:
-                break;
-        }
-        return StatCtrl.None;
-    }
 
-    public void OnVisit(List<Instruction> code)
-    {
-        switch (mStatType)
-        {
-            case StatType.StatCompound:
-                mCompundStat.OnVisit(code); break;
-            case StatType.StatExp:
-                mExpStat.OnVisit(code); break;
-            case StatType.StatFor:
-                mForStat.OnVisit(code); break;
-            case StatType.StatIf:
-                mIfStat.OnVisit(code); break;
-            case StatType.StatWhile:
-                mWhileStat.OnVisit(code); break;
-            case StatType.StatJump:
-                mJumpStat.OnVisit(code); break;
-            case StatType.StatFun:
-                mFunStat.OnVisit(code); break;
-            default:
-                break;
-        }
-    }
     public bool Parse(TokenReader tokenReader)
     {
         Token t = tokenReader.Peek();
@@ -194,22 +148,59 @@ class Stat : IStat
             return mExpStat.Parse(tokenReader);
         }
     }
+
+    public StatCtrl Exec(Scope scope)
+    {
+        switch (mStatType)
+        {
+            case StatType.StatCompound:
+                return mCompundStat.Exec(scope);
+            case StatType.StatExp:
+                return mExpStat.Exec(scope);
+            case StatType.StatFor:
+                return mForStat.Exec(scope);
+            case StatType.StatIf:
+                return mIfStat.Exec(scope);
+            case StatType.StatWhile:
+                return mWhileStat.Exec(scope);
+            case StatType.StatJump:
+                return mJumpStat.Exec(scope);
+            case StatType.StatFun:
+                return mFunStat.Exec(scope);
+            default:
+                break;
+        }
+        return StatCtrl.None;
+    }
+
+    public void Visit(List<Instruction> code)
+    {
+        switch (mStatType)
+        {
+            case StatType.StatCompound:
+                mCompundStat.Visit(code); break;
+            case StatType.StatExp:
+                mExpStat.Visit(code); break;
+            case StatType.StatFor:
+                mForStat.Visit(code); break;
+            case StatType.StatIf:
+                mIfStat.Visit(code); break;
+            case StatType.StatWhile:
+                mWhileStat.Visit(code); break;
+            case StatType.StatJump:
+                mJumpStat.Visit(code); break;
+            case StatType.StatFun:
+                mFunStat.Visit(code); break;
+            default:
+                break;
+        }
+    }
 }
 
 class ExpStat : IStat
 {
     Exp mExp;
-    public StatCtrl Exec(Scope scope)
-    {
-        mExp?.Calc();
-        return StatCtrl.None;
-    }
-    public void OnVisit(List<Instruction> code)
-    {
-        //如果是个语句则执行后栈应该是空的
-        mExp.OnVisit(code);
-        mExp.MaybeAddClear(code);
-    }
+
     public bool Parse(TokenReader tokenReader)
     {
         var expTokens = tokenReader.SeekNextToken(TokenType.TTSimicolon);
@@ -220,6 +211,18 @@ class ExpStat : IStat
         mExp = new Exp();
         return mExp.Parse(expTokens) && IsValidExpStatement();
     }
+    public StatCtrl Exec(Scope scope)
+    {
+        mExp?.Calc();
+        return StatCtrl.None;
+    }
+    public void Visit(List<Instruction> code)
+    {
+        //如果是个语句则执行后栈应该是空的
+        mExp.Visit(code);
+        mExp.MaybeAddClear(code);
+    }
+
 
     //只有赋值，声明，自增，函数调用可以作为语句存在
     bool IsValidExpStatement()
@@ -241,34 +244,6 @@ class ExpStat : IStat
 class CompoundStat : IStat
 {
     public List<IStat> mStatList = new List<IStat>();
-    public StatCtrl Exec(Scope scope)
-    {
-        Scope mScope = new Scope();
-        mScope.SetUpScope(scope);
-        Env.LocalScope = mScope;
-        foreach (var stat in mStatList)
-        {
-            StatCtrl ctrl = stat.Exec(mScope);
-            if (ctrl != StatCtrl.None)
-            {
-                Env.LocalScope = scope;
-                return ctrl;
-            }
-        }
-        Env.LocalScope = scope;
-        return StatCtrl.None;
-    }
-
-    public void OnVisit(List<Instruction> code)
-    {
-        //嵌套scope不好处理break和continue
-        //code.Add(new Instruction(OpCode.EnterScope));
-        foreach (var stat in mStatList)
-        {
-            stat.OnVisit(code);
-        }
-        //code.Add(new Instruction(OpCode.LeaveScope));
-    }
 
     public bool Parse(TokenReader tokenReader)
     {
@@ -293,6 +268,36 @@ class CompoundStat : IStat
         }
         return true;
     }
+
+    public StatCtrl Exec(Scope scope)
+    {
+        Scope mScope = new Scope();
+        mScope.SetUpScope(scope);
+        Env.LocalScope = mScope;
+        foreach (var stat in mStatList)
+        {
+            StatCtrl ctrl = stat.Exec(mScope);
+            if (ctrl != StatCtrl.None)
+            {
+                Env.LocalScope = scope;
+                return ctrl;
+            }
+        }
+        Env.LocalScope = scope;
+        return StatCtrl.None;
+    }
+
+    public void Visit(List<Instruction> code)
+    {
+        //嵌套scope不好处理break和continue
+        //code.Add(new Instruction(OpCode.EnterScope));
+        foreach (var stat in mStatList)
+        {
+            stat.Visit(code);
+        }
+        //code.Add(new Instruction(OpCode.LeaveScope));
+    }
+
 }
 
 
@@ -303,45 +308,6 @@ class IfStat : IStat
     public IStat mIfStat;
     public IStat mElseStat;
 
-    public StatCtrl Exec(Scope scope)
-    {
-        if (mCondExp.Calc() == true)
-        {
-            StatCtrl ctrl = mIfStat.Exec(scope);
-            if (ctrl != StatCtrl.None)
-            {
-                return ctrl;
-            }
-        }
-        else
-        {
-            if (mElseStat != null)
-            {
-                var ctrl = mElseStat.Exec(scope);
-                if (ctrl != StatCtrl.None)
-                {
-                    return ctrl;
-                }
-            }
-        }
-        return StatCtrl.None;
-    }
-
-    public void OnVisit(List<Instruction> code)
-    {
-        mCondExp.OnVisit(code);
-        Instruction njump = new Instruction(OpCode.NJump);//跳过if
-        code.Add(njump);
-        mIfStat.OnVisit(code);
-        Instruction jump = new Instruction(OpCode.Jump);//跳过else
-        code.Add(jump);
-        njump.OpInt = code.Count; //妙
-        if (mElseStat != null)
-        {
-            mElseStat.OnVisit(code);
-        }
-        jump.OpInt = code.Count;
-    }
     public bool Parse(TokenReader tokenReader)
     {
 
@@ -388,6 +354,46 @@ class IfStat : IStat
             return true;
         }
     }
+
+    public StatCtrl Exec(Scope scope)
+    {
+        if (mCondExp.Calc() == true)
+        {
+            StatCtrl ctrl = mIfStat.Exec(scope);
+            if (ctrl != StatCtrl.None)
+            {
+                return ctrl;
+            }
+        }
+        else
+        {
+            if (mElseStat != null)
+            {
+                var ctrl = mElseStat.Exec(scope);
+                if (ctrl != StatCtrl.None)
+                {
+                    return ctrl;
+                }
+            }
+        }
+        return StatCtrl.None;
+    }
+
+    public void Visit(List<Instruction> code)
+    {
+        mCondExp.Visit(code);
+        Instruction njump = new Instruction(OpCode.NJump);//跳过if
+        code.Add(njump);
+        mIfStat.Visit(code);
+        Instruction jump = new Instruction(OpCode.Jump);//跳过else
+        code.Add(jump);
+        njump.OpInt = code.Count; //妙
+        if (mElseStat != null)
+        {
+            mElseStat.Visit(code);
+        }
+        jump.OpInt = code.Count;
+    }
 }
 
 enum ForStatType
@@ -404,149 +410,12 @@ class ForStat : IStat
     public IStat mStat;
     public ForInExp mForinExp;
 
-    public StatCtrl Exec(Scope scope)
-    {
-        Scope mScope = new Scope();
-        mScope.SetUpScope(scope);
-        Env.LocalScope = mScope;
-        if (mForStatType == ForStatType.LoopFor)
-        {
-            for (mExp1?.Calc(); mExp2 == null ? true : mExp2.Calc() == true; mExp3?.Calc())
-            {
-                var ctrl = mStat.Exec(mScope);
-                if (ctrl == StatCtrl.Return)
-                {
-                    mScope.Clear();
-                    Env.LocalScope = scope;
-                    return StatCtrl.Return;
-                }
-                else if (ctrl == StatCtrl.Break)
-                {
-                    break;
-                }
-                else if (ctrl == StatCtrl.Continue)
-                {
-                    continue;
-                }
-            }
-        }
-        else if (mForStatType == ForStatType.IterFor)
-        {
-            mForinExp.Calc();
-            while (mForinExp.Next())
-            {
-                var ctrl = mStat.Exec(mScope);
-                if (ctrl == StatCtrl.Return)
-                {
-                    mScope.Clear();
-                    Env.LocalScope = scope;
-                    return StatCtrl.Return;
-                }
-                else if (ctrl == StatCtrl.Break)
-                {
-                    break;
-                }
-                else if (ctrl == StatCtrl.Continue)
-                {
-                    continue;
-                }
-            }
-
-        }
-        mScope.Clear();
-        Env.LocalScope = scope;
-        return StatCtrl.None;
-    }
-    public void OnVisit(List<Instruction> code)
-    {
-
-        code.Add(new Instruction(OpCode.EnterScope));
-        if (mForStatType == ForStatType.LoopFor)
-        {
-            if (mExp1 != null)
-            {
-                mExp1.OnVisit(code);
-                mExp1.MaybeAddClear(code);
-            }
-            //第一次不执行后处理
-            Instruction firstJump = new Instruction(OpCode.Jump);
-            code.Add(firstJump);
-
-            //continue 从这里开始
-            Instruction cjump = new Instruction(OpCode.Jump) { OpInt = code.Count };
-            Instruction njump = new Instruction(OpCode.NJump);
-            Instruction bjump = new Instruction(OpCode.Jump);
-            JumpLabel jumplabel = new JumpLabel(cjump, bjump);
-            Instruction.JumpLabels.Push(jumplabel);
-
-            //后处理
-            if (mExp3 != null)
-            {
-                mExp3.OnVisit(code);
-                mExp3.MaybeAddClear(code);
-            }
-            firstJump.OpInt = code.Count;
-
-            //条件判断
-            if (mExp2 == null)
-            {
-                code.Add(new Instruction(OpCode.Push) { OpVar = true });
-            }
-            else
-            {
-                mExp2.OnVisit(code);
-            }
-            code.Add(njump);
-            //循环体
-            mStat.OnVisit(code);
-
-            code.Add(cjump);
-            njump.OpInt = code.Count;
-            bjump.OpInt = code.Count;
-            Instruction.JumpLabels.Pop();
-        }
-        else if (mForStatType == ForStatType.IterFor)
-        {
-            mForinExp.OnVisit(code);
-            //需要保证栈顶是exp返回的对象或数组
-            //迭代器添加的两个变量压栈
-            Variant key = new Variant();
-            key.id = mForinExp.mParams[0].desc;
-            code.Add(new Instruction(OpCode.Push) { OpVar = key });
-            Variant val = new Variant();
-            val.id = mForinExp.mParams[1].desc;
-            code.Add(new Instruction(OpCode.Push) { OpVar = val });
-            //迭代器
-            code.Add(new Instruction(OpCode.Enum));
-            //循环起点
-            int label = code.Count;
-            Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
-            Instruction njump = new Instruction(OpCode.NJump);
-            Instruction bjump = new Instruction(OpCode.Jump);
-            JumpLabel jumplabel = new JumpLabel(cjump, bjump);
-            Instruction.JumpLabels.Push(jumplabel);
-            //通过next指令迭代
-            Instruction next = new Instruction(OpCode.Next);
-            code.Add(next);
-            mStat.OnVisit(code);
-
-            code.Add(cjump);
-            next.OpInt = code.Count;//next完成后跳转到后面的指令
-            njump.OpInt = code.Count;
-            bjump.OpInt = code.Count;
-            //支持多级break
-            Instruction.JumpLabels.Pop();
-        }
-
-        code.Add(new Instruction(OpCode.LeaveScope));
-    }
     public bool Parse(TokenReader tokenReader)
     {
         TokenReader expReader = null;
         var t = tokenReader.Next();
 
         //for
-
         if (t.tokenType != TokenType.TTFor)
         {
             return false;
@@ -616,50 +485,149 @@ class ForStat : IStat
         mStat = new Stat();
         return mStat.Parse(tokenReader);
     }
+
+    public StatCtrl Exec(Scope scope)
+    {
+        Scope mScope = new Scope();
+        mScope.SetUpScope(scope);
+        Env.LocalScope = mScope;
+        if (mForStatType == ForStatType.LoopFor)
+        {
+            for (mExp1?.Calc(); mExp2 == null ? true : mExp2.Calc() == true; mExp3?.Calc())
+            {
+                var ctrl = mStat.Exec(mScope);
+                if (ctrl == StatCtrl.Return)
+                {
+                    mScope.Clear();
+                    Env.LocalScope = scope;
+                    return StatCtrl.Return;
+                }
+                else if (ctrl == StatCtrl.Break)
+                {
+                    break;
+                }
+                else if (ctrl == StatCtrl.Continue)
+                {
+                    continue;
+                }
+            }
+        }
+        else if (mForStatType == ForStatType.IterFor)
+        {
+            mForinExp.Calc();
+            while (mForinExp.Next())
+            {
+                var ctrl = mStat.Exec(mScope);
+                if (ctrl == StatCtrl.Return)
+                {
+                    mScope.Clear();
+                    Env.LocalScope = scope;
+                    return StatCtrl.Return;
+                }
+                else if (ctrl == StatCtrl.Break)
+                {
+                    break;
+                }
+                else if (ctrl == StatCtrl.Continue)
+                {
+                    continue;
+                }
+            }
+
+        }
+        mScope.Clear();
+        Env.LocalScope = scope;
+        return StatCtrl.None;
+    }
+    public void Visit(List<Instruction> code)
+    {
+
+        code.Add(new Instruction(OpCode.EnterScope));
+        if (mForStatType == ForStatType.LoopFor)
+        {
+            if (mExp1 != null)
+            {
+                mExp1.Visit(code);
+                mExp1.MaybeAddClear(code);
+            }
+            //第一次不执行后处理
+            Instruction firstJump = new Instruction(OpCode.Jump);
+            code.Add(firstJump);
+
+            //continue 从这里开始
+            Instruction cjump = new Instruction(OpCode.Jump) { OpInt = code.Count };
+            Instruction njump = new Instruction(OpCode.NJump);
+            Instruction bjump = new Instruction(OpCode.Jump);
+            JumpLabel jumplabel = new JumpLabel(cjump, bjump);
+            Instruction.JumpLabels.Push(jumplabel);
+
+            //后处理
+            if (mExp3 != null)
+            {
+                mExp3.Visit(code);
+                mExp3.MaybeAddClear(code);
+            }
+            firstJump.OpInt = code.Count;
+
+            //条件判断
+            if (mExp2 == null)
+            {
+                code.Add(new Instruction(OpCode.Push) { OpVar = true });
+            }
+            else
+            {
+                mExp2.Visit(code);
+            }
+            code.Add(njump);
+            //循环体
+            mStat.Visit(code);
+
+            code.Add(cjump);
+            njump.OpInt = code.Count;
+            bjump.OpInt = code.Count;
+            Instruction.JumpLabels.Pop();
+        }
+        else if (mForStatType == ForStatType.IterFor)
+        {
+            mForinExp.Visit(code);
+            //需要保证栈顶是exp返回的对象或数组
+            //迭代器添加的两个变量压栈
+            Variant key = new Variant();
+            key.id = mForinExp.mParams[0].desc;
+            code.Add(new Instruction(OpCode.Push) { OpVar = key });
+            Variant val = new Variant();
+            val.id = mForinExp.mParams[1].desc;
+            code.Add(new Instruction(OpCode.Push) { OpVar = val });
+            //迭代器
+            code.Add(new Instruction(OpCode.Enum));
+            //循环起点
+            int label = code.Count;
+            Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
+            Instruction njump = new Instruction(OpCode.NJump);
+            Instruction bjump = new Instruction(OpCode.Jump);
+            JumpLabel jumplabel = new JumpLabel(cjump, bjump);
+            Instruction.JumpLabels.Push(jumplabel);
+            //通过next指令迭代
+            Instruction next = new Instruction(OpCode.Next);
+            code.Add(next);
+            mStat.Visit(code);
+
+            code.Add(cjump);
+            next.OpInt = code.Count;//next完成后跳转到后面的指令
+            njump.OpInt = code.Count;
+            bjump.OpInt = code.Count;
+            //支持多级break
+            Instruction.JumpLabels.Pop();
+        }
+
+        code.Add(new Instruction(OpCode.LeaveScope));
+    }
 }
 
 class WhileStat : IStat
 {
     public Exp mCondExp;
     public Stat mStat;
-    public StatCtrl Exec(Scope scope)
-    {
-        while (mCondExp.Calc() == true)
-        {
-            var ctrl = mStat.Exec(scope);
-            if (ctrl == StatCtrl.Return)
-            {
-                return StatCtrl.Return;
-            }
-            else if (ctrl == StatCtrl.Break)
-            {
-                break;
-            }
-            else if (ctrl == StatCtrl.Continue)
-            {
-                continue;
-            }
-        }
-        return StatCtrl.None;
-    }
-
-    public void OnVisit(List<Instruction> code)
-    {
-        int label = code.Count;
-        Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
-        Instruction njump = new Instruction(OpCode.NJump);
-        Instruction bjump = new Instruction(OpCode.Jump);
-        JumpLabel jumplabel = new JumpLabel(cjump, bjump);
-        Instruction.JumpLabels.Push(jumplabel);
-
-        mCondExp.OnVisit(code);
-        code.Add(njump);
-        mStat.OnVisit(code);
-        code.Add(cjump);
-        njump.OpInt = code.Count;
-        bjump.OpInt = code.Count;
-        Instruction.JumpLabels.Pop();
-    }
 
     public bool Parse(TokenReader tokenReader)
     {
@@ -691,6 +659,46 @@ class WhileStat : IStat
         mStat = new Stat();
         return mStat.Parse(tokenReader);
     }
+
+    public StatCtrl Exec(Scope scope)
+    {
+        while (mCondExp.Calc() == true)
+        {
+            var ctrl = mStat.Exec(scope);
+            if (ctrl == StatCtrl.Return)
+            {
+                return StatCtrl.Return;
+            }
+            else if (ctrl == StatCtrl.Break)
+            {
+                break;
+            }
+            else if (ctrl == StatCtrl.Continue)
+            {
+                continue;
+            }
+        }
+        return StatCtrl.None;
+    }
+
+    public void Visit(List<Instruction> code)
+    {
+        int label = code.Count;
+        Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
+        Instruction njump = new Instruction(OpCode.NJump);
+        Instruction bjump = new Instruction(OpCode.Jump);
+        JumpLabel jumplabel = new JumpLabel(cjump, bjump);
+        Instruction.JumpLabels.Push(jumplabel);
+
+        mCondExp.Visit(code);
+        code.Add(njump);
+        mStat.Visit(code);
+        code.Add(cjump);
+        njump.OpInt = code.Count;
+        bjump.OpInt = code.Count;
+        Instruction.JumpLabels.Pop();
+    }
+
 }
 
 //break continue break
@@ -698,6 +706,28 @@ class JumpStat : IStat
 {
     public Token mToken;
     public Exp mRetExp;
+
+    public bool Parse(TokenReader tokenReader)
+    {
+        var t = tokenReader.Next();
+        mToken = t;
+        if (t.tokenType == TokenType.TTReturn)
+        {
+            mRetExp = new Exp();
+            var expTokens = tokenReader.SeekNextToken(TokenType.TTSimicolon);
+            if (!mRetExp.Parse(expTokens))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            tokenReader.SeekNextToken(TokenType.TTSimicolon);
+        }
+
+        return true;
+    }
+
     public StatCtrl Exec(Scope scope)
     {
         if (mToken.tokenType == TokenType.TTBreak)
@@ -720,7 +750,7 @@ class JumpStat : IStat
         }
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (mToken.tokenType == TokenType.TTBreak)
         {
@@ -734,32 +764,12 @@ class JumpStat : IStat
         }
         else if (mToken.tokenType == TokenType.TTReturn)
         {
-            mRetExp.OnVisit(code);
+            mRetExp.Visit(code);
             code.Add(new Instruction(OpCode.Ret));
         }
 
     }
 
-    public bool Parse(TokenReader tokenReader)
-    {
-        var t = tokenReader.Next();
-        mToken = t;
-        if (t.tokenType == TokenType.TTReturn)
-        {
-            mRetExp = new Exp();
-            var expTokens = tokenReader.SeekNextToken(TokenType.TTSimicolon);
-            if (!mRetExp.Parse(expTokens))
-            {
-                return false;
-            }
-        }
-        else
-        {
-            tokenReader.SeekNextToken(TokenType.TTSimicolon);
-        }
-
-        return true;
-    }
 }
 
 
@@ -773,6 +783,54 @@ class FunStat : IStat
     public List<Token> mParams;//形参
     public CompoundStat mStat;
 
+    public bool Parse(TokenReader tokenReader)
+    {
+        var t = tokenReader.Next();
+
+        if (t.tokenType != TokenType.TTFuncion)
+        {
+            return false;
+        }
+
+        t = tokenReader.Next();
+        if (t.tokenType != TokenType.TTID)
+        {
+            return false;
+        }
+        mFunID = t;
+
+        t = tokenReader.Peek();
+
+        if (t.tokenType != TokenType.TTLeftBracket)
+        {
+            return false;
+        }
+
+        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket, TokenType.TTRightBracket);
+        if (expTokens.Count > 0)
+        {
+            mParams = new List<Token>();
+            TokenReader tr = new TokenReader(expTokens);
+            t = tr.Next();
+            while (t != null)
+            {
+                mParams.Add(t);
+                t = tr.Next();
+                if (t != null)
+                {
+                    if (t.tokenType != TokenType.TTComma)
+                    {
+                        return false;
+                    }
+                    t = tr.Next();
+                }
+            }
+        }
+
+        mStat = new CompoundStat();
+        bool ret = mStat.Parse(tokenReader);
+        return ret;
+    }
 
     public void Call(Scope scope)
     {
@@ -825,7 +883,7 @@ class FunStat : IStat
         return StatCtrl.None;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         var v = new Variant();
         v.variantType = VariantType.Function;
@@ -843,7 +901,7 @@ class FunStat : IStat
         }
         else
         {
-            mStat.OnVisit(code);
+            mStat.Visit(code);
         }
         //返回值在栈顶，return语句清栈后写入返回值
         //手动return一下
@@ -851,53 +909,5 @@ class FunStat : IStat
         jump.OpInt = code.Count;
     }
 
-    public bool Parse(TokenReader tokenReader)
-    {
-        var t = tokenReader.Next();
-
-        if (t.tokenType != TokenType.TTFuncion)
-        {
-            return false;
-        }
-
-        t = tokenReader.Next();
-        if (t.tokenType != TokenType.TTID)
-        {
-            return false;
-        }
-        mFunID = t;
-
-        t = tokenReader.Peek();
-
-        if (t.tokenType != TokenType.TTLeftBracket)
-        {
-            return false;
-        }
-
-        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket, TokenType.TTRightBracket);
-        if (expTokens.Count > 0)
-        {
-            mParams = new List<Token>();
-            TokenReader tr = new TokenReader(expTokens);
-            t = tr.Next();
-            while (t != null)
-            {
-                mParams.Add(t);
-                t = tr.Next();
-                if (t != null)
-                {
-                    if (t.tokenType != TokenType.TTComma)
-                    {
-                        return false;
-                    }
-                    t = tr.Next();
-                }
-            }
-        }
-
-        mStat = new CompoundStat();
-        bool ret = mStat.Parse(tokenReader);
-        return ret;
-    }
 
 }

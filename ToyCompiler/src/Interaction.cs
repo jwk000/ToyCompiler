@@ -33,7 +33,7 @@ namespace ToyCompiler
                     var v = Env.LocalScope.GetVariant(t.desc);
                     if (v != null)
                     {
-                        Console.Write($"{v}\t");
+                        Console.Write($"{v} ");
                     }
                     else
                     {

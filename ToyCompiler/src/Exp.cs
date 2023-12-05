@@ -55,7 +55,7 @@ interface IExp
 {
     bool Parse(TokenReader reader);
     Variant Calc();
-    void OnVisit(List<Instruction> code);
+    void Visit(List<Instruction> code);
     ExpType GetExpType();
 }
 
@@ -125,19 +125,19 @@ class Exp : IExp
             return assign.Calc();
         }
     }
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (decl != null)
         {
-            decl.OnVisit(code);
+            decl.Visit(code);
         }
         else if(forin != null)
         {
-            forin.OnVisit(code);
+            forin.Visit(code);
         }
         else
         {
-            assign.OnVisit(code);
+            assign.Visit(code);
         }
     }
 }
@@ -228,48 +228,48 @@ class AssignExp : IExp
         throw new Exception($"invalid assign op {op}");
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (op == null)
         {
-            left.OnVisit(code);
+            left.Visit(code);
         }
         else if (op.tokenType == TokenType.TTAssign)
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Assign));
         }
         else if (op.tokenType == TokenType.TTPlusAssign)
         {
-            left.OnVisit(code);
+            left.Visit(code);
             code.Add(new Instruction(OpCode.SLoad) { OpInt=1});
-            right.OnVisit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Add));
             code.Add(new Instruction(OpCode.Assign));
         }
         else if (op.tokenType == TokenType.TTMinusAssign)
         {
-            left.OnVisit(code);
+            left.Visit(code);
             code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
-            right.OnVisit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Sub));
             code.Add(new Instruction(OpCode.Assign));
         }
         else if (op.tokenType == TokenType.TTMultipleAssign)
         {
-            left.OnVisit(code);
+            left.Visit(code);
             code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
-            right.OnVisit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Mul));
             code.Add(new Instruction(OpCode.Assign));
 
         }
         else if (op.tokenType == TokenType.TTDivisionAssign)
         {
-            left.OnVisit(code);
+            left.Visit(code);
             code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
-            right.OnVisit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Div));
             code.Add(new Instruction(OpCode.Assign));
         }
@@ -320,9 +320,9 @@ class VarDeclExp : IExp
         return v;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
-        mCond.OnVisit(code);
+        mCond.Visit(code);
         code.Add(new Instruction(OpCode.Store) { OpStr = mID.desc });
     }
 
@@ -388,9 +388,9 @@ class ForInExp : IExp
         return v;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
-        mExp.OnVisit(code);
+        mExp.Visit(code);
     }
 
     public bool Next()
@@ -540,18 +540,18 @@ class ConditionExp : IExp
         return v;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
-        left.OnVisit(code);
+        left.Visit(code);
         if (mid != null && right != null)
         {
             Instruction njump = new Instruction(OpCode.NJump);
             code.Add(njump);
-            mid.OnVisit(code);
+            mid.Visit(code);
             Instruction jumpEnd = new Instruction(OpCode.Jump);
             code.Add(jumpEnd);
             njump.OpInt = code.Count;
-            right.OnVisit(code);
+            right.Visit(code);
             jumpEnd.OpInt = code.Count;
         }
     }
@@ -614,15 +614,15 @@ class UnaryExp : IExp
         throw new Exception($"unary operator {op} not supported");
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (op == null)
         {
-            postfix.OnVisit(code);
+            postfix.Visit(code);
         }
         else if (op.tokenType == TokenType.TTPlusPlus)
         {
-            unary.OnVisit(code);
+            unary.Visit(code);
             code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
             code.Add(new Instruction(OpCode.Push) { OpVar = 1 });
             code.Add(new Instruction(OpCode.Add));
@@ -630,7 +630,7 @@ class UnaryExp : IExp
         }
         else if (op.tokenType == TokenType.TTMinusMinus)
         {
-            unary.OnVisit(code);
+            unary.Visit(code);
             code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
             code.Add(new Instruction(OpCode.Push) { OpVar = 1 });
             code.Add(new Instruction(OpCode.Sub));
@@ -638,7 +638,7 @@ class UnaryExp : IExp
         }
         else if (op.tokenType == TokenType.TTNot)
         {
-            unary.OnVisit(code);
+            unary.Visit(code);
             code.Add(new Instruction(OpCode.Not));
         }
     }
@@ -758,7 +758,6 @@ class PostfixExp : IExp
                     next = _next;
                 }
             }
-
         }
 
         return true;
@@ -787,18 +786,18 @@ class PostfixExp : IExp
         {
             return v;
         }
-        v = _calc(this, v);
+        v = OnCalc(this, v);
         var _next = next;
         while (_next != null)
         {
-            v = _calc(_next, v);
+            v = OnCalc(_next, v);
             _next = _next.next;
         }
 
         return v;
     }
 
-    static Variant _calc(PostfixExp p, Variant v)
+    static Variant OnCalc(PostfixExp p, Variant v)
     {
         if (p.postfixType == PostfixType.PlusPlus)
         {
@@ -864,24 +863,24 @@ class PostfixExp : IExp
         }
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
-        if(first) prim.OnVisit(code);
+        if(first) prim.Visit(code);
         if (postfixType == PostfixType.None)
         {
             return;
         }
-        _OnVisit(code);
+        OnVisit(code);
         var _next = next;
         while (_next != null)
         {
-            _next.OnVisit(code);
+            _next.Visit(code);
             _next = _next.next;
         }
 
     }
 
-    void _OnVisit(List<Instruction> code)
+    void OnVisit(List<Instruction> code)
     {
         if (postfixType == PostfixType.PlusPlus)
         {
@@ -904,7 +903,7 @@ class PostfixExp : IExp
             //参数压栈
             foreach (var exp in funArgs)
             {
-                exp.OnVisit(code);
+                exp.Visit(code);
             }
             //参数数量
             code.Add(new Instruction(OpCode.Push) { OpVar = funArgs.Count });
@@ -916,7 +915,7 @@ class PostfixExp : IExp
 
         else if (postfixType == PostfixType.Index)//array
         {
-            indexExp.OnVisit(code);
+            indexExp.Visit(code);
             code.Add(new Instruction(OpCode.Index));
         }
         else if (postfixType == PostfixType.Point)//object
@@ -976,16 +975,16 @@ class OrExp : IExp
         }
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (right == null)
         {
-            left.OnVisit(code);
+            left.Visit(code);
         }
         else
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Or));
         }
     }
@@ -1014,10 +1013,7 @@ class AndExp : IExp
                 return right.Parse(reader);
             }
         }
-
-
         return true;
-
     }
 
     public ExpType GetExpType()
@@ -1040,16 +1036,16 @@ class AndExp : IExp
         }
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (right == null)
         {
-            left.OnVisit(code);
+            left.Visit(code);
         }
         else
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             Instruction ins = new Instruction(OpCode.And);
             code.Add(ins);
         }
@@ -1070,7 +1066,6 @@ class EqualExp : IExp
             return false;
         }
 
-
         Token t = reader.Peek();
         if (t != null)
         {
@@ -1084,7 +1079,6 @@ class EqualExp : IExp
         }
 
         return true;
-
     }
 
     public ExpType GetExpType()
@@ -1112,23 +1106,22 @@ class EqualExp : IExp
         throw new Exception($"equal not support {op}");
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (op == null)
         {
-            left.OnVisit(code);
+            left.Visit(code);
         }
         else if (op.tokenType == TokenType.TTEqual)
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.EQ));
-
         }
         else if (op.tokenType == TokenType.TTNotEqual)
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.NE));
         }
     }
@@ -1148,7 +1141,6 @@ class RelationExp : IExp
             return false;
         }
 
-
         Token t = reader.Peek();
         if (t != null)
         {
@@ -1162,7 +1154,6 @@ class RelationExp : IExp
         }
 
         return true;
-
     }
 
     public ExpType GetExpType()
@@ -1199,34 +1190,34 @@ class RelationExp : IExp
         throw new Exception($"relation not suport {op}");
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (op == null)
         {
-            left.OnVisit(code);
+            left.Visit(code);
         }
         else if (op.tokenType == TokenType.TTLessThan)
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.LT));
         }
         else if (op.tokenType == TokenType.TTLessEqual)
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.LE));
         }
         else if (op.tokenType == TokenType.TTGreatThan)
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.GT));
         }
         else if (op.tokenType == TokenType.TTGreatEqual)
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.GE));
         }
     }
@@ -1259,7 +1250,6 @@ class PlusExp : IExp
                     return false;
                 }
             }
-
         }
 
         return true;
@@ -1290,22 +1280,22 @@ class PlusExp : IExp
         }
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (op == null)
         {
-            left.OnVisit(code);
+            left.Visit(code);
         }
         else if (op.tokenType == TokenType.TTPlus)
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Add));
         }
         else
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Sub));
         }
     }
@@ -1338,9 +1328,7 @@ class MulExp : IExp
                     return false;
                 }
             }
-
         }
-
         return true;
     }
 
@@ -1368,22 +1356,22 @@ class MulExp : IExp
         }
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (op == null)
         {
-            left.OnVisit(code);
+            left.Visit(code);
         }
         else if (op.tokenType == TokenType.TTMultiple)
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Mul));
         }
         else
         {
-            left.OnVisit(code);
-            right.OnVisit(code);
+            left.Visit(code);
+            right.Visit(code);
             code.Add(new Instruction(OpCode.Div));
         }
     }
@@ -1518,7 +1506,7 @@ class PrimExp : IExp
         }
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (primType == PrimExpType.Number)
         {
@@ -1540,15 +1528,15 @@ class PrimExp : IExp
         }
         else if (primType == PrimExpType.Exp)
         {
-            exp.OnVisit(code);
+            exp.Visit(code);
         }
         else if (primType == PrimExpType.Array)
         {
-            arr.OnVisit(code);
+            arr.Visit(code);
         }
         else if (primType == PrimExpType.Object)
         {
-            obj.OnVisit(code);
+            obj.Visit(code);
         }
         else
         {
@@ -1617,13 +1605,13 @@ class ArrayExp : IExp
         return v;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         if (args != null)
         {
             foreach (var exp in args)
             {
-                exp.OnVisit(code);
+                exp.Visit(code);
             }
         }
         code.Add(new Instruction(OpCode.NewArray) { OpInt = args.Count });
@@ -1700,12 +1688,12 @@ class ObjectExp : IExp
         return v;
     }
 
-    public void OnVisit(List<Instruction> code)
+    public void Visit(List<Instruction> code)
     {
         foreach (var kv in kvs)
         {
             code.Add(new Instruction(OpCode.Push) { OpVar = kv.Key });
-            kv.Value.OnVisit(code);
+            kv.Value.Visit(code);
         }
         code.Add(new Instruction(OpCode.NewObj) { OpInt=kvs.Count});
     }

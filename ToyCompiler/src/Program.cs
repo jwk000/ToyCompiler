@@ -11,7 +11,7 @@ namespace ToyCompiler
         //tc -v file.js 虚拟机模式
         //tc -d file.js 调试器模式
         //tc -c file.js 编译器模式
-        //tc -i 交互模式
+        //tc -i 交互模式(开发中)
         //tc -t testcase 运行测试用例
         static void Main(string[] args)
         {

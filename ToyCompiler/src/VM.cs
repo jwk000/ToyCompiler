@@ -285,6 +285,29 @@ namespace ToyCompiler
     //js调用cs的函数
     public delegate int APIDelegate(VM vm);
 
+    static class Env
+    {
+        public static List<Variant> RunStack = new List<Variant>();//函数运行栈
+        public static Scope LocalScope;//当前作用域
+        public static Scope GlobalScope = new Scope();//全局作用域
+
+        public static void RegisterBuildinFunctions()
+        {
+            RegFun(Interaction.Print());
+            RegFun(Interaction.Len());
+
+        }
+
+        static void RegFun(FunStat fun)
+        {
+            Variant v = new Variant();
+            v.variantType = VariantType.Function;
+            v.fun = fun;
+            v.id = fun.mFunID.desc;
+            GlobalScope.SetVariant(v);
+        }
+    }
+
     public class VM
     {
         StatTree tree = new StatTree();
@@ -339,9 +362,9 @@ namespace ToyCompiler
 
         void Visit(StatTree tree = null)
         {
-            Interaction.Print().OnVisit(ctx.Code);
-            Interaction.Len().OnVisit(ctx.Code);
-            tree?.OnVisit(ctx.Code);
+            Interaction.Print().Visit(ctx.Code);
+            Interaction.Len().Visit(ctx.Code);
+            tree?.Visit(ctx.Code);
 
             for (int i = 0; i < ctx.Code.Count; i++)
             {
@@ -361,7 +384,6 @@ namespace ToyCompiler
             }
             Console.WriteLine(sb.ToString());
         }
-
 
         public void Run(int label = 0)
         {
@@ -952,13 +974,15 @@ namespace ToyCompiler
         {
             //cs 调用 js
             string code = "function fib(n) {if(n<3){return n;} return fib(n-1)+fib(n-2);}";
+            //js 调用 cs
             code += "print(\"js call cs fib(5)=\", csfib(5));";
-
+            //注册cs函数
             RegFunc(Interaction.JsCallCs_Fibonacci, "csfib");
             Parse(code);
             Visit(tree);
             Dump();
             Run();
+            //调用js函数
             Interaction.CsCallJs_Fibonacci(this);
         }
 
