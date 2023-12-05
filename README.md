@@ -5,10 +5,53 @@
 命令行说明
 
 ```bash
-#遍历语法树执行代码
-> ./toycompiler.exe tr file.js
-#虚拟机执行代码（d 附加调试器）
-> ./toycompiler.exe vm file.js [d]
+> tc -e file.js 解释器模式
+> tc -v file.js 虚拟机模式
+> tc -d file.js 调试器模式
+> tc -c file.js 编译器模式
+> tc -i 交互模式(开发中)
+> tc -t testcase 运行测试用例
+```
+
+## 2023-12-5 更新
+
+- 调整代码结构，vm作为核心类处理所有操作，vm负责词法分析、生成语法树、编译字节码、执行字节码、与csharp互操作；
+- 增加了宿主语言C#和js的互操作API，实现了C#调用js，js调用C#；
+
+互操作测试用例
+```csharp
+public static int JsCallCs_Fibonacci(VM vm)
+{
+    //从栈上获取参数
+    int n = (int)vm.API_ArgToNumber(0);
+    int r = fib(n);
+    vm.API_PushNumber(r);
+    return 1;//返回值数量
+}
+
+public static void CsCallJs_Fibonacci(VM vm)
+{
+    Variant v = 10;
+    vm.API_Call("fib", v);
+    int ret = (int)vm.API_PeekNumber(0);
+    Console.WriteLine(ret);
+}
+
+public void TestInteraction()
+{
+    //cs 调用 js
+    string code = "function fib(n) {if(n<3){return n;} return fib(n-1)+fib(n-2);}";
+    //js 调用 cs
+    code += "print(\"js call cs fib(5)=\", csfib(5));";
+    //注册cs函数
+    RegFunc(Interaction.JsCallCs_Fibonacci, "csfib");
+    Parse(code);
+    Visit(tree);
+    Dump();
+    Run();
+    //调用js函数
+    Interaction.CsCallJs_Fibonacci(this);
+}    
 ```
 
 ## 2023-11-30 更新
@@ -112,13 +155,16 @@
 //变量声明
 var a = 42;
 var b = (a + 3) / 6;
-var c = a >= b * 5 ? (a <= b * 6 ? b : 1) : 0;
-print(a, b, c);
+var cc = a >= b * 5 ? (a <= b * 6 ? b : 1) : 0;
+print(a, b, cc);
 
 //for循环
+a = 50;
+b = 0;
+//for循环
 for (var i = 0; i < 10; i++) {
-    a -= i;
-    if (a <= 0 || b - a > 5) {
+    a -= i * 3;//0 3 6 9 12 15 18
+    if (a <= 0) {
         break;
     } else {
         b++;
@@ -133,7 +179,7 @@ while (true) {
     s = s + s;
     break;
 }
-print(s)
+print(s);
 
 //函数声明
 function f(a, b, c) {
@@ -145,17 +191,31 @@ function f(a, b, c) {
 var d = f(a, b, 2);
 print(d);
 
+//递归函数
+function fib(n) {
+    if (n < 3) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+print(fib(10));
+
 //数组声明
 var arr = [1, 2, 3, "a", "b", "c"];
 //数组访问
-for (var i = 0; i < arr.len(); i++) {
+for (var i = 0; i < len(arr); i++) {
     print(arr[i]);
+}
+//for in 循环
+for (var i, v in arr) {
+    print(i, v)
 }
 
 //对象声明
-var t = { a=1, b=2, c="123", d=[1, 2, 3, 4, 5] };
+var t = { a=1, b=2, c="123", d=[1, 2, 3, 4, 5], e={ x=100, y=200 } };
+//字段访问
+print(t.a, t.c, t.e.x);
 //对象访问
 for (var k, v in t) {
     print(k, v);
 }
+
 ```
