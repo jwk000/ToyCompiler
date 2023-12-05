@@ -545,7 +545,7 @@ class ConditionExp : IExp
         left.OnVisit(code);
         if (mid != null && right != null)
         {
-            Instruction njump = new Instruction(OpCode.JumpFalse);
+            Instruction njump = new Instruction(OpCode.NJump);
             code.Add(njump);
             mid.OnVisit(code);
             Instruction jumpEnd = new Instruction(OpCode.Jump);

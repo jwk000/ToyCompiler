@@ -2,7 +2,7 @@
   "profiles": {
     "ToyCompiler": {
       "commandName": "Project",
-      "commandLineArgs": "-i",
+      "commandLineArgs": "-t interact",
       "workingDirectory": "F:\\ToyCompiler\\ToyCompiler\\test"
     }
   }

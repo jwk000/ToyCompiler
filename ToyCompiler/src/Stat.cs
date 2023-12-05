@@ -330,7 +330,7 @@ class IfStat : IStat
     public void OnVisit(List<Instruction> code)
     {
         mCondExp.OnVisit(code);
-        Instruction njump = new Instruction(OpCode.JumpFalse);//跳过if
+        Instruction njump = new Instruction(OpCode.NJump);//跳过if
         code.Add(njump);
         mIfStat.OnVisit(code);
         Instruction jump = new Instruction(OpCode.Jump);//跳过else
@@ -474,7 +474,7 @@ class ForStat : IStat
 
             //continue 从这里开始
             Instruction cjump = new Instruction(OpCode.Jump) { OpInt = code.Count };
-            Instruction njump = new Instruction(OpCode.JumpFalse);
+            Instruction njump = new Instruction(OpCode.NJump);
             Instruction bjump = new Instruction(OpCode.Jump);
             JumpLabel jumplabel = new JumpLabel(cjump, bjump);
             Instruction.JumpLabels.Push(jumplabel);
@@ -521,7 +521,7 @@ class ForStat : IStat
             //循环起点
             int label = code.Count;
             Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
-            Instruction njump = new Instruction(OpCode.JumpFalse);
+            Instruction njump = new Instruction(OpCode.NJump);
             Instruction bjump = new Instruction(OpCode.Jump);
             JumpLabel jumplabel = new JumpLabel(cjump, bjump);
             Instruction.JumpLabels.Push(jumplabel);
@@ -647,7 +647,7 @@ class WhileStat : IStat
     {
         int label = code.Count;
         Instruction cjump = new Instruction(OpCode.Jump) { OpInt = label };
-        Instruction njump = new Instruction(OpCode.JumpFalse);
+        Instruction njump = new Instruction(OpCode.NJump);
         Instruction bjump = new Instruction(OpCode.Jump);
         JumpLabel jumplabel = new JumpLabel(cjump, bjump);
         Instruction.JumpLabels.Push(jumplabel);

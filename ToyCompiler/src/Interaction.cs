@@ -85,7 +85,7 @@ namespace ToyCompiler
         public static int JsCallCs_Fibonacci(VM vm)
         {
             //从栈上获取参数
-            int n = (int)vm.API_ToNumber(0);
+            int n = (int)vm.API_ArgToNumber(0);
             int r = fib(n);
             vm.API_PushNumber(r);
             return 1;//返回值数量
@@ -93,9 +93,9 @@ namespace ToyCompiler
 
         public static void CsCallJs_Fibonacci(VM vm)
         {
-            vm.API_PushNumber(10);
-            vm.API_Call("fib");
-            int ret = (int)vm.API_ToNumber(0);
+            Variant v = 10;
+            vm.API_Call("fib", v);
+            int ret = (int)vm.API_PeekNumber(0);
             Console.WriteLine(ret);
         }
     }

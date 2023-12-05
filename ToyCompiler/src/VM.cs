@@ -27,7 +27,7 @@ namespace ToyCompiler
         public const int Or = 14; //Or
         public const int Not = 15;//Not
         public const int Jump = 16;//JMP
-        public const int JumpTrue = 17;
+        public const int NJump = 17;
         public const int Call = 18;//Call
         public const int Ret = 19; //RET
         public const int Halt = 20;//Halt
@@ -43,7 +43,7 @@ namespace ToyCompiler
         public const int NewArray = 30;//
         public const int NewObj = 31;
         public const int Enum = 32;//栈顶是对象，取迭代器，入栈
-        public const int JumpFalse = 33;
+        public const int CallCS = 33;//调用cs函数
         public const int SLoad = 34;//栈上的变量压入栈顶
         public const int Print = 35;
         public const int Len = 36;
@@ -51,9 +51,9 @@ namespace ToyCompiler
 
         public static string[] OpCodeNames = new string[]
         {
-            "NOP","PUSH","ADD","SUB","MUL","DIV","REM","EQ","NE","LT","LE","GT","GE","AND","OR","NOT","JUMP","JUMPTRUE",
+            "NOP","PUSH","ADD","SUB","MUL","DIV","REM","EQ","NE","LT","LE","GT","GE","AND","OR","NOT","JUMP","NJUMP",
             "CALL","RET","HALT","ENTERSCOPE","LEAVESCOPE","NEXT","POP","LOAD","STORE","ASSIGN","INDEX","DOT","NEWARRAY","NEWOBJ",
-            "ENUM","JUMPFALSE","SLOAD","PRINT","LEN","CLEAR"
+            "ENUM","CALLCS","SLOAD","PRINT","LEN","CLEAR"
         };
     }
 
@@ -81,13 +81,13 @@ namespace ToyCompiler
         public override string ToString()
         {
             string param = "";
-            switch (Op){
+            switch (Op)
+            {
                 case OpCode.Push:
                     param = OpVar.ToString();
                     break;
                 case OpCode.Jump:
-                case OpCode.JumpFalse:
-                case OpCode.JumpTrue:
+                case OpCode.NJump:
                 case OpCode.Next:
                 case OpCode.Index:
                 case OpCode.SLoad:
@@ -98,7 +98,7 @@ namespace ToyCompiler
                 case OpCode.Dot:
                     param = OpStr;
                     break;
-                    
+
             }
             return $"{CodeLine,4:0000} {OpCode.OpCodeNames[Op],-12} {param}";
         }
@@ -156,7 +156,7 @@ namespace ToyCompiler
 
         public void BeforeStep()
         {
-            if(mStepMode || mBreakPoints.Contains(mCtx.IP))
+            if (mStepMode || mBreakPoints.Contains(mCtx.IP))
             {
                 WaitRun();
             }
@@ -164,14 +164,14 @@ namespace ToyCompiler
 
         public void AfterStep(Instruction ins)
         {
-            if(mStepMode)
+            if (mStepMode)
             {
                 StringBuilder sb = new StringBuilder();
                 foreach (var v in mCtx.Stack)
                 {
-                    sb.Append(v.ToString()+" ");
+                    sb.Append(v.ToString() + " ");
                 }
-                
+
                 Console.WriteLine($"{ins,-28} [IP:{mCtx.IP,4}][BP:{mCtx.BP,4}][SP:{mCtx.SP,4}]|Stack:{sb}");
             }
         }
@@ -180,9 +180,9 @@ namespace ToyCompiler
         {
             Console.Write(">");
             string cmd = Console.ReadLine();
-            if(cmd.Length == 0)
+            if (cmd.Length == 0)
             {
-                if (mLastCmd.Length>0)
+                if (mLastCmd.Length > 0)
                 {
                     cmd = mLastCmd;
                 }
@@ -216,15 +216,15 @@ namespace ToyCompiler
                     }
                 case "l":
                     {
-                        PrintCode();break;
+                        PrintCode(); break;
                     }
                 case "sc":
                     {
-                        PrintScope();break;
+                        PrintScope(); break;
                     }
                 case "bt":
                     {
-                        PrintCallStack();break;
+                        PrintCallStack(); break;
                     }
                 default:
                     break;
@@ -238,7 +238,7 @@ namespace ToyCompiler
             {
                 mBreakPoints.Add(lineno);
             }
-                
+
             Console.WriteLine($"BreakPoint at {lineno} added.");
         }
         public void DelBreakPoint(int lineno)
@@ -250,15 +250,15 @@ namespace ToyCompiler
         public void PrintVariant(string varname)
         {
             Variant v = mCtx.LocalScope.GetVariant(varname);
-            if(v != null)
+            if (v != null)
             {
                 Console.WriteLine($"{varname}:{v}");
             }
         }
 
-        public void PrintCode(int n=10)
+        public void PrintCode(int n = 10)
         {
-            for(int i = 0; i < n; i++)
+            for (int i = 0; i < n; i++)
             {
                 Console.WriteLine(mCtx.Code[mCtx.IP + i]);
             }
@@ -276,7 +276,7 @@ namespace ToyCompiler
             while (bp > 0)
             {
                 bp = (int)mCtx.Stack[bp].num;
-                Variant f = mCtx.Stack[bp+1];
+                Variant f = mCtx.Stack[bp + 1];
                 Console.WriteLine(f);//todo 发起调用的行
             }
         }
@@ -310,7 +310,7 @@ namespace ToyCompiler
 
             //语法分析
             TokenReader tokenReader = new TokenReader(lexer.mTokenList);
-            
+
             if (!tree.Parse(tokenReader))
             {
                 Console.WriteLine("stat parse failed!");
@@ -337,7 +337,7 @@ namespace ToyCompiler
             }
         }
 
-        void Visit(StatTree tree=null)
+        void Visit(StatTree tree = null)
         {
             Interaction.Print().OnVisit(ctx.Code);
             Interaction.Len().OnVisit(ctx.Code);
@@ -348,12 +348,14 @@ namespace ToyCompiler
                 Instruction ins = ctx.Code[i];
                 ins.CodeLine = i;
             }
+            //从run移到这里
+            ctx.LocalScope = ctx.GlobalScope;
         }
 
-        public void DumpInstructions()
+        public void Dump()
         {
             StringBuilder sb = new StringBuilder();
-            foreach(Instruction ins in ctx.Code)
+            foreach (Instruction ins in ctx.Code)
             {
                 sb.AppendLine(ins.ToString());
             }
@@ -361,10 +363,8 @@ namespace ToyCompiler
         }
 
 
-        public void Run(int label =0)
+        public void Run(int label = 0)
         {
-            ctx.LocalScope = ctx.GlobalScope;
- 
             dbg?.WaitRun();
 
             for (ctx.IP = label; ctx.IP < ctx.Code.Count;)
@@ -584,7 +584,7 @@ namespace ToyCompiler
                         }
                     case OpCode.NewArray:
                         {//栈顶是变量名，下面是元素个数，下面是元素，依次出栈构造变量写入作用域
-                            
+
                             Variant vArr = new Variant();
                             vArr.variantType = VariantType.Array;
                             vArr.arr = new VArray();
@@ -594,7 +594,7 @@ namespace ToyCompiler
                             }
                             vArr.arr.Reverse();
                             ctx.Stack.Push(vArr);
-                            ctx.SP -= ins.OpInt-1;
+                            ctx.SP -= ins.OpInt - 1;
                             ctx.IP++;
                             break;
                         }
@@ -607,10 +607,10 @@ namespace ToyCompiler
                             {
                                 var val = ctx.Stack.Pop();
                                 var key = ctx.Stack.Pop();
-                                vObj.obj.Add(key.str,val);
+                                vObj.obj.Add(key.str, val);
                             }
                             ctx.Stack.Push(vObj);
-                            ctx.SP -= ins.OpInt * 2 -1;
+                            ctx.SP -= ins.OpInt * 2 - 1;
                             ctx.IP++;
                             break;
                         }
@@ -643,7 +643,7 @@ namespace ToyCompiler
                             }
                             ctx.Stack.Push(e);
                             ctx.Stack.Push(ctx.BP);
-                            ctx.SP+=2;
+                            ctx.SP += 2;
                             ctx.BP = ctx.SP;//新的栈帧，迭代器完成后还原栈帧
                             ctx.IP++;
                             break;
@@ -702,20 +702,7 @@ namespace ToyCompiler
                             ctx.IP = ins.OpInt;
                             break;
                         }
-                    case OpCode.JumpTrue:
-                        {
-                            if (ctx.Stack.Pop() == true)
-                            {
-                                ctx.IP = ins.OpInt;
-                            }
-                            else
-                            {
-                                ctx.IP++;
-                            }
-                            ctx.SP--;
-                            break;
-                        }
-                    case OpCode.JumpFalse:
+                    case OpCode.NJump:
                         {
                             if (ctx.Stack.Pop() == false)
                             {
@@ -730,26 +717,53 @@ namespace ToyCompiler
                         }
                     case OpCode.Call:
                         {
-                            //栈：函数变量，参数列表，参数数量，返回地址，作用域，BP
-                            ctx.Stack.Push(ctx.LocalScope);
-                            ctx.Stack.Push(ctx.BP);
-                            ctx.SP+=2;
-                            ctx.BP = ctx.SP;
-
-                            //新的作用域写入参数
-                            Scope scope = new Scope();
-                            scope.SetUpScope(ctx.GlobalScope);
-                            ctx.LocalScope = scope;
-                            int argNum = (int)ctx.Stack.Peek(4);
-                            Variant func = ctx.Stack.Peek(5 + argNum);
-                            for(int i = 0; i < argNum; i++)
+                            //调用前的栈：函数变量，参数列表，参数数量，返回地址
+                            int argNum = (int)ctx.Stack.Peek(2);
+                            Variant func = ctx.Stack.Peek(3 + argNum);
+                            if (func.api != null) //宿主函数
                             {
-                                Variant v = new Variant();
-                                v.id = func.fun.mParams[i].desc;
-                                v.Assign(ctx.Stack.Peek(4 + argNum - i));
-                                scope.SetVariant(v);
+                                int retNum = func.api.Invoke(this);
+                                List<Variant> rets = new List<Variant>();
+                                for(int i=0;i<retNum;i++)
+                                {
+                                    rets.Add(ctx.Stack.Pop());
+                                }
+                                ctx.IP = (int)ctx.Stack.Pop();//返回地址出栈
+                                ctx.Stack.Pop();//参数数量出栈
+                                for (int i = 0; i < argNum; i++)
+                                {
+                                    ctx.Stack.Pop();//参数出栈
+                                }
+                                ctx.Stack.Pop();//函数变量出栈
+                                //返回值压栈
+                                for (int i = 0; i < rets.Count; i++)
+                                {
+                                    ctx.Stack.Push(rets[i]);
+                                }
+                                ctx.SP -= 3 + argNum;
                             }
-                            ctx.IP = func.label;
+                            else //脚本函数
+                            {
+                                //栈：函数变量，参数列表，参数数量，返回地址，作用域，BP
+                                ctx.Stack.Push(ctx.LocalScope);
+                                ctx.Stack.Push(ctx.BP);
+                                ctx.SP += 2;
+                                ctx.BP = ctx.SP;
+
+                                //新的作用域写入参数
+                                Scope scope = new Scope();
+                                scope.SetUpScope(ctx.GlobalScope);
+                                ctx.LocalScope = scope;
+
+                                for (int i = 0; i < argNum; i++)
+                                {
+                                    Variant v = new Variant();
+                                    v.id = func.fun.mParams[i].desc;
+                                    v.Assign(ctx.Stack.Peek(4 + argNum - i));
+                                    scope.SetVariant(v);
+                                }
+                                ctx.IP = func.label;
+                            }
 
                             break;
                         }
@@ -758,7 +772,7 @@ namespace ToyCompiler
                             //栈：函数变量，参数列表，参数数量，返回地址，作用域，BP，返回值
                             //返回值暂存
                             List<Variant> rets = new List<Variant>();
-                            while (ctx.Stack.Count > ctx.BP+1)
+                            while (ctx.Stack.Count > ctx.BP + 1)
                             {
                                 rets.Add(ctx.Stack.Pop());
                             }
@@ -772,7 +786,7 @@ namespace ToyCompiler
                             }
                             ctx.Stack.Pop();//函数变量出栈
                             //返回值压栈
-                            for(int i = 0; i < rets.Count; i++)
+                            for (int i = 0; i < rets.Count; i++)
                             {
                                 ctx.Stack.Push(rets[i]);
                             }
@@ -817,7 +831,7 @@ namespace ToyCompiler
                     default:
                         break;
                 }
-                
+
                 dbg?.AfterStep(ins);
             }
 
@@ -834,45 +848,38 @@ namespace ToyCompiler
 
             List<string> cmdHistory = new List<string>();
             int historyIndex = -1;
-
+            string cmd = "";
+            bool nextline = true;
             while (true)
             {
-                Console.Write(">");
+                if (nextline) { Console.Write(">"); nextline = false; }
+
                 ConsoleKeyInfo keyInfo = Console.ReadKey(true);
-                if(keyInfo.Key == ConsoleKey.Escape)
+                if (keyInfo.Key == ConsoleKey.Escape)
                 {
                     break;
                 }
-                if(keyInfo.Key == ConsoleKey.Enter)
-                {
-                    string code = Console.ReadLine();
-                    if (string.IsNullOrEmpty(code))
-                    {
-                        continue;
-                    }
-                    cmdHistory.Add(code);
-                    historyIndex = cmdHistory.Count - 1;
-                }
-                else if(keyInfo.Key == ConsoleKey.UpArrow)
+
+                if (keyInfo.Key == ConsoleKey.UpArrow)
                 {
                     if (historyIndex >= 0)
                     {
                         Console.SetCursorPosition(0, Console.CursorTop);
                         Console.Write(new string(' ', Console.WindowWidth)); // 清空当前行
                         Console.SetCursorPosition(0, Console.CursorTop);
-
+                        Console.Write('>');
                         Console.Write(cmdHistory[historyIndex]);
                         historyIndex = Math.Max(0, historyIndex - 1);
                     }
                 }
-                else if(keyInfo.Key == ConsoleKey.DownArrow)
+                else if (keyInfo.Key == ConsoleKey.DownArrow)
                 {
                     if (historyIndex < cmdHistory.Count - 1)
                     {
                         Console.SetCursorPosition(0, Console.CursorTop);
                         Console.Write(new string(' ', Console.WindowWidth)); // 清空当前行
                         Console.SetCursorPosition(0, Console.CursorTop);
-
+                        Console.Write('>');
                         historyIndex = Math.Min(cmdHistory.Count - 1, historyIndex + 1);
                         Console.Write(cmdHistory[historyIndex]);
                     }
@@ -882,20 +889,75 @@ namespace ToyCompiler
                         Console.SetCursorPosition(0, Console.CursorTop);
                         Console.Write(new string(' ', Console.WindowWidth));
                         Console.SetCursorPosition(0, Console.CursorTop);
+                        Console.Write('>');
                     }
+                }
+                else if (keyInfo.Key == ConsoleKey.Enter)
+                {
+                    if (string.IsNullOrEmpty(cmd))
+                    {
+                        continue;
+                    }
+
+                    if (!Parse(cmd))
+                    {
+                        continue;
+                    }
+                    Visit(tree);
+                    Run();
+                    cmdHistory.Add(cmd);
+                    historyIndex = cmdHistory.Count - 1;
+                    nextline = true;
+                }
+                else if (keyInfo.Key == ConsoleKey.Backspace)
+                {
+                    if (cmd.Length > 0)
+                    {
+                        cmd = cmd.Substring(0, cmd.Length - 1);
+                        Console.SetCursorPosition(0, Console.CursorTop);
+                        Console.Write(new string(' ', Console.WindowWidth));
+                        Console.SetCursorPosition(0, Console.CursorTop);
+                        Console.Write(">{0}", cmd);
+                    }
+                }
+                else if (keyInfo.Key == ConsoleKey.LeftArrow)
+                {
+                    if (Console.CursorLeft >= 1)
+                    {
+                        Console.SetCursorPosition(Console.CursorLeft - 1, Console.CursorTop);
+                    }
+                }
+                else if (keyInfo.Key == ConsoleKey.RightArrow)
+                {
+                    if (Console.CursorLeft < cmd.Length)
+                    {
+                        Console.SetCursorPosition(Console.CursorLeft + 1, Console.CursorTop);
+                    }
+                }
+                else
+                {
+                    char c = keyInfo.KeyChar;
+                    cmd += c;
+
+                    Console.SetCursorPosition(0, Console.CursorTop);
+                    Console.Write(new string(' ', Console.WindowWidth));
+                    Console.SetCursorPosition(0, Console.CursorTop);
+                    Console.Write(">{0}", cmd);
+
                 }
             }
         }
-        
+
         public void TestInteraction()
         {
             //cs 调用 js
-            string code = "function fib(n) {if(n<3){return n;} return fib(n-1)+fib(n-2);}" +
-                "print(\"js call cs fib(5)=\", csfib(5));";
+            string code = "function fib(n) {if(n<3){return n;} return fib(n-1)+fib(n-2);}";
+            code += "print(\"js call cs fib(5)=\", csfib(5));";
 
             RegFunc(Interaction.JsCallCs_Fibonacci, "csfib");
             Parse(code);
             Visit(tree);
+            Dump();
             Run();
             Interaction.CsCallJs_Fibonacci(this);
         }
@@ -912,40 +974,61 @@ namespace ToyCompiler
         }
 
         //idx从0开始
-        public double API_ToNumber(int idx)
+        public double API_ArgToNumber(int idx)
         {
-            int argNum = (int)ctx.Stack.Peek(4);
-            Variant v = ctx.Stack.Peek(4 + argNum - idx);
+            int argNum = (int)ctx.Stack.Peek(2);
+            Variant v = ctx.Stack.Peek(2 + argNum - idx);
             return (double)v;
         }
 
-        public string API_ToString(int idx)
+        public string API_ArgToString(int idx)
         {
-            int argNum = (int)ctx.Stack.Peek(4);
-            Variant v = ctx.Stack.Peek(4 + argNum - idx);
+            int argNum = (int)ctx.Stack.Peek(2);
+            Variant v = ctx.Stack.Peek(2 + argNum - idx);
             return (string)v;
         }
 
-        public bool API_ToBoolean(int idx)
+        public bool API_ArgToBoolean(int idx)
         {
-            int argNum = (int)ctx.Stack.Peek(4);
-            Variant v = ctx.Stack.Peek(4 + argNum - idx);
+            int argNum = (int)ctx.Stack.Peek(2);
+            Variant v = ctx.Stack.Peek(2 + argNum - idx);
+            return (bool)v;
+        }
+
+        public double API_PeekNumber(int idx)
+        {
+            Variant v = ctx.Stack.Peek(idx + 1);
+            return (double)v;
+        }
+
+        public string API_PeekString(int idx)
+        {
+            Variant v = ctx.Stack.Peek(idx + 1);
+            return (string)v;
+        }
+
+        public bool API_PeekBoolean(int idx)
+        {
+            Variant v = ctx.Stack.Peek(idx + 1);
             return (bool)v;
         }
 
         public void API_PushNumber(double d)
         {
             ctx.Stack.Push(d);
+            ctx.SP++;
         }
 
         public void API_PushString(string s)
         {
             ctx.Stack.Push(s);
+            ctx.SP++;
         }
 
         public void API_PushBoolean(bool b)
         {
             ctx.Stack.Push(b);
+            ctx.SP++;
         }
 
         public int API_GetArgCount()
@@ -954,6 +1037,7 @@ namespace ToyCompiler
             return argNum;
         }
 
+        //模拟了call指令
         public int API_Call(string name, params object[] args)
         {
             Variant f = ctx.LocalScope.GetVariant(name);
@@ -968,7 +1052,7 @@ namespace ToyCompiler
                 ctx.Stack.Push(ctx.Code.Count);//返回地址
                 ctx.Stack.Push(ctx.LocalScope);
                 ctx.Stack.Push(ctx.BP);
-                ctx.SP += 4 + args.Length;
+                ctx.SP += 5 + args.Length;
                 ctx.BP = ctx.SP;
                 Scope scope = new Scope();
                 scope.SetUpScope(ctx.GlobalScope);

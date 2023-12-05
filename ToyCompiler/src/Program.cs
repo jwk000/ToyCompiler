@@ -45,7 +45,7 @@ namespace ToyCompiler
                 //编译成指令执行
                 string script = File.ReadAllText(args[1]);
                 vm.Compile(script);
-                vm.DumpInstructions();
+                vm.Dump();
             }
             else if (runMode == "-i")
             {
