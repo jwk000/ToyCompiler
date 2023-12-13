@@ -38,6 +38,7 @@ namespace ToyCompiler
                 string script = File.ReadAllText(args[1]);
                 vm.AttachDebugger();
                 vm.Compile(script);
+                vm.Dump();
                 vm.Run();
             }
             else if (runMode == "-c")

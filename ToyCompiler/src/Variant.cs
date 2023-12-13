@@ -18,7 +18,8 @@ namespace ToyCompiler
         Function,
         Label,
         Enum,
-        Scope
+        Scope,
+        Coroutine
     }
 
     class Variant
@@ -35,6 +36,7 @@ namespace ToyCompiler
         public APIDelegate api;//cs实现的函数
         public int label;//vm层的函数：vm跳转用的label
         public IEnumerator enu;//对象迭代器
+        public Coroutine co;
 
         public void Assign(Variant w)//赋值不包含id
         {
@@ -48,6 +50,7 @@ namespace ToyCompiler
             this.label = w.label;
             this.enu = w.enu;
             this.scope = w.scope;
+            this.co = w.co;
         }
 
         public Variant Clone()
@@ -69,9 +72,10 @@ namespace ToyCompiler
                 VariantType.Array => $"<arr>{arr}",
                 VariantType.Object => $"<obj>{obj}",
                 VariantType.Label => $"<label>{label}",
-                VariantType.Function => $"<func>{fun.mFunID.desc}",
-                VariantType.Enum=>$"<enum>",
-                VariantType.Scope=>$"<scope>",
+                VariantType.Function => $"<func>{id}",
+                VariantType.Enum=>"<enum>",
+                VariantType.Scope=>"<scope>",
+                VariantType.Coroutine=>$"<co>{id}",
                 _ => $"NotVariant"
             };
         }
@@ -103,6 +107,10 @@ namespace ToyCompiler
         public static implicit operator Variant(Scope s)
         {
             return new Variant { variantType = VariantType.Scope, scope = s };
+        }
+        public static implicit operator Variant(Coroutine c)
+        {
+            return new Variant { variantType = VariantType.Coroutine, co = c };
         }
 
         public static explicit operator double(Variant v)
@@ -159,6 +167,15 @@ namespace ToyCompiler
                 return v.scope;
             }
             throw new InvalidCastException("variant is not scope");
+        }
+
+        public static explicit operator Coroutine(Variant v)
+        {
+            if(v.variantType == VariantType.Coroutine)
+            {
+                return v.co;
+            }
+            throw new InvalidCastException("variant is not coroutine");
         }
 
         //重载true和false和&可以用&&操作

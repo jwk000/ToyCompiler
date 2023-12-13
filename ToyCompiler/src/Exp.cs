@@ -21,9 +21,10 @@ namespace ToyCompiler;
  * mul = unary  ('/'|'*'|'%' unary)*
  * unary = postfix | '++' unary | '--' unary | '!+-' unary 
  * postfix = prim | postfix '++'| postfix '--' |postfix '(' args? ')'| postfix '[' exp ']'| postfix '.' ID
- * prim = ID | NUM | STR | '(' exp ')' | arr | obj
+ * prim = ID | NUM | STR | '(' exp ')' | arr | obj | co
  * arr = '[' args? ']'
  * obj = '{' kvs? '}'
+ * co = 'coyield'|'coresume'
  * args = exp (',' exp)*
  * kvs = ID '=' exp (',' ID '=' exp)*
  * params = ID (, ID)*
@@ -33,10 +34,10 @@ namespace ToyCompiler;
 enum ExpType
 {
     ETNone,
-    ETAssign ,
-    ETVarDecl ,
-    ETForIn ,
-    ETCondition ,
+    ETAssign,
+    ETVarDecl,
+    ETForIn,
+    ETCondition,
     ETOr,
     ETAnd,
     ETNot,
@@ -64,7 +65,7 @@ class Exp : IExp
     public AssignExp assign;
     public VarDeclExp decl;
     public ForInExp forin;
-    
+
     public bool Parse(TokenReader reader)
     {
         Token t = reader.Peek();
@@ -104,11 +105,11 @@ class Exp : IExp
             case ExpType.ETPosInc:
             case ExpType.ETCall:
                 code.Add(new Instruction(OpCode.Clear));
-                break ;
+                break;
             default:
                 break;
         }
-                
+
     }
     public Variant Calc()
     {
@@ -131,7 +132,7 @@ class Exp : IExp
         {
             decl.Visit(code);
         }
-        else if(forin != null)
+        else if (forin != null)
         {
             forin.Visit(code);
         }
@@ -243,7 +244,7 @@ class AssignExp : IExp
         else if (op.tokenType == TokenType.TTPlusAssign)
         {
             left.Visit(code);
-            code.Add(new Instruction(OpCode.SLoad) { OpInt=1});
+            code.Add(new Instruction(OpCode.SLoad) { OpInt = 1 });
             right.Visit(code);
             code.Add(new Instruction(OpCode.Add));
             code.Add(new Instruction(OpCode.Assign));
@@ -277,10 +278,11 @@ class AssignExp : IExp
     }
 }
 
+//多值声明
 class VarDeclExp : IExp
 {
-    public Token mID;
-    public ConditionExp mCond;
+    public List<Token> mIds;
+    public List<ConditionExp> mConds;
 
     public bool Parse(TokenReader reader)
     {
@@ -289,44 +291,93 @@ class VarDeclExp : IExp
         {
             return false;
         }
-
-        t = reader.Next();
-        if (t.tokenType != TokenType.TTID)
+        mIds = new List<Token>();
+        while (reader.Peek().tokenType != TokenType.TTAssign)
         {
-            return false;
+            t = reader.Next();
+            if (t.tokenType != TokenType.TTID)
+            {
+                return false;
+            }
+            mIds.Add(t);
+
+            if (reader.Peek().tokenType == TokenType.TTAssign)
+            {
+                break;
+            }
+
+            t = reader.Next();
+            if (t.tokenType != TokenType.TTComma)
+            {
+                return false;
+            }
         }
 
-        mID = t;
+
         t = reader.Next();
         if (t.tokenType != TokenType.TTAssign)
         {
             return false;
         }
-        mCond = new ConditionExp();
-        return mCond.Parse(reader);
-    }
 
+        List<Token> ts = reader.SeekNextToken(TokenType.TTSimicolon);
+        if (ts.Count <= 0)
+        {
+            return false;
+        }
+        TokenReader tr = new TokenReader(ts);
+        mConds = new List<ConditionExp>();
+        while (!tr.IsEnd())
+        {
+            var exp = new ConditionExp();
+            if (!exp.Parse(tr))
+            {
+                return false;
+            }
+            mConds.Add(exp);
+            Token nt = tr.Next();
+            if (nt == null)
+            {
+                break;
+            }
+            if (nt.tokenType != TokenType.TTComma)
+            {
+                return false;
+            }
+        }
+        if (mIds.Count != mConds.Count)
+        {
+            return false;
+        }
+        return true;
+    }
     public ExpType GetExpType()
     {
         return ExpType.ETVarDecl;
     }
     public Variant Calc()
     {
-        Variant v = new Variant();
-        v.id = mID.desc;
-        Variant ret = mCond.Calc();
-        v.Assign(ret);
-        Env.LocalScope.SetVariant(v);
-        return v;
+        for (int i = 0; i < mIds.Count; i++)
+        {
+            Variant v = new Variant();
+            v.id = mIds[i].desc;
+            Variant ret = mConds[i].Calc();
+            v.Assign(ret);
+            Executor.LocalScope.SetVariant(v);
+        }
+        return null;
     }
 
     public void Visit(List<Instruction> code)
     {
-        mCond.Visit(code);
-        code.Add(new Instruction(OpCode.Store) { OpStr = mID.desc });
+        for (int i = 0; i < mIds.Count; i++)
+        {
+            mConds[i].Visit(code);
+            code.Add(new Instruction(OpCode.Store) { OpStr = mIds[i].desc });
+        }
     }
-
 }
+
 //for(var item in arr)
 class ForInExp : IExp
 {
@@ -402,24 +453,24 @@ class ForInExp : IExp
             {
                 //下标
                 var t = mParams[0];
-                Variant v = Env.LocalScope.GetVariant(t.desc);
+                Variant v = Executor.LocalScope.GetVariant(t.desc);
                 if (v == null)
                 {
                     v = new Variant();
                     v.variantType = VariantType.Number;
                     v.id = t.desc;
-                    Env.LocalScope.SetVariant(v);
+                    Executor.LocalScope.SetVariant(v);
                 }
                 v.num = mIndex++;
 
                 //值
                 t = mParams[1];
-                v = Env.LocalScope.GetVariant(t.desc);
+                v = Executor.LocalScope.GetVariant(t.desc);
                 if (v == null)
                 {
                     v = new Variant();
                     v.id = t.desc;
-                    Env.LocalScope.SetVariant(v);
+                    Executor.LocalScope.SetVariant(v);
                 }
                 v.Assign(it.Current);
 
@@ -437,24 +488,24 @@ class ForInExp : IExp
             {
                 //key
                 var t = mParams[0];
-                Variant v = Env.LocalScope.GetVariant(t.desc);
+                Variant v = Executor.LocalScope.GetVariant(t.desc);
                 if (v == null)
                 {
                     v = new Variant();
                     v.variantType = VariantType.String;
                     v.id = t.desc;
-                    Env.LocalScope.SetVariant(v);
+                    Executor.LocalScope.SetVariant(v);
                 }
                 v.str = it.Current.Key;
 
                 //值
                 t = mParams[1];
-                Variant u = Env.LocalScope.GetVariant(t.desc);
+                Variant u = Executor.LocalScope.GetVariant(t.desc);
                 if (u == null)
                 {
                     u = new Variant();
                     u.id = t.desc;
-                    Env.LocalScope.SetVariant(u);
+                    Executor.LocalScope.SetVariant(u);
                 }
                 u.Assign(it.Current.Value);
 
@@ -583,7 +634,7 @@ class UnaryExp : IExp
         {
             return postfix.GetExpType();
         }
-        if(op.tokenType == TokenType.TTPlusPlus || op.tokenType == TokenType.TTMinusMinus)
+        if (op.tokenType == TokenType.TTPlusPlus || op.tokenType == TokenType.TTMinusMinus)
         {
             return ExpType.ETPreInc;
         }
@@ -688,14 +739,14 @@ class PostfixExp : IExp
                 reader.Next();
                 postfixType = PostfixType.MinusMinus;
             }
-            else if (t.tokenType == TokenType.TTLeftBracket) //()
+            else if (t.tokenType == TokenType.TTLeftBracket1) //()
             {
                 postfixType = PostfixType.FuncCall;
-                List<Token> ts = reader.SeekMatchBracket(TokenType.TTLeftBracket, TokenType.TTRightBracket);
+                funArgs = new List<Exp>();
+                List<Token> ts = reader.SeekMatchBracket(TokenType.TTLeftBracket1, TokenType.TTRightBracket1);
                 if (ts.Count > 0)
                 {
                     TokenReader tr = new TokenReader(ts);
-                    funArgs = new List<Exp>();
                     while (!tr.IsEnd())
                     {
 
@@ -714,9 +765,7 @@ class PostfixExp : IExp
                         {
                             return false;
                         }
-
                     }
-
                 }
             }
             else if (t.tokenType == TokenType.TTLeftBracket2)//[]
@@ -765,15 +814,15 @@ class PostfixExp : IExp
 
     public ExpType GetExpType()
     {
-        if(postfixType == PostfixType.None)
+        if (postfixType == PostfixType.None)
         {
             return prim.GetExpType();
         }
-        if(postfixType == PostfixType.FuncCall)
+        if (postfixType == PostfixType.FuncCall)
         {
             return ExpType.ETCall;
         }
-        if(postfixType == PostfixType.PlusPlus||postfixType == PostfixType.MinusMinus)
+        if (postfixType == PostfixType.PlusPlus || postfixType == PostfixType.MinusMinus)
         {
             return ExpType.ETPosInc;
         }
@@ -811,20 +860,20 @@ class PostfixExp : IExp
         }
         else if (p.postfixType == PostfixType.FuncCall)
         {
-            var f = Env.LocalScope.GetVariant(v.id);
+            var f = Executor.LocalScope.GetVariant(v.id);
             if (f != null)
             {
                 var stat = f.fun;
                 //参数压栈
                 foreach (var exp in p.funArgs)
                 {
-                    Env.RunStack.Add(exp.Calc());
+                    Executor.RunStack.Add(exp.Calc());
                 }
-                stat.Call(Env.LocalScope);
-                if (Env.RunStack.Count > 0)
+                stat.Call(Executor.LocalScope);
+                if (Executor.RunStack.Count > 0)
                 {
-                    v = Env.RunStack[0];
-                    Env.RunStack.Clear();
+                    v = Executor.RunStack[0];
+                    Executor.RunStack.Clear();
                     return v;
                 }
                 else
@@ -839,7 +888,7 @@ class PostfixExp : IExp
         }
         else if (p.postfixType == PostfixType.Index)//array
         {
-            Variant va = Env.LocalScope.GetVariant(v.id);
+            Variant va = Executor.LocalScope.GetVariant(v.id);
             if (va == null || va.arr == null)
             {
                 throw new Exception($"invalid array index {v.id}");
@@ -849,7 +898,7 @@ class PostfixExp : IExp
         }
         else if (p.postfixType == PostfixType.Point)//object
         {
-            Variant va = Env.LocalScope.GetVariant(v.id);
+            Variant va = Executor.LocalScope.GetVariant(v.id);
             if (va == null || va.obj == null)
             {
                 throw new Exception($"invalid object access {v.id}");
@@ -865,19 +914,42 @@ class PostfixExp : IExp
 
     public void Visit(List<Instruction> code)
     {
-        if(first) prim.Visit(code);
-        if (postfixType == PostfixType.None)
-        {
-            return;
-        }
-        OnVisit(code);
-        var _next = next;
-        while (_next != null)
-        {
-            _next.Visit(code);
-            _next = _next.next;
-        }
+        if (first) prim.Visit(code);
 
+        if (prim.primType == PrimExpType.CoYield)
+        {
+            //参数压栈
+            foreach (var exp in funArgs)
+            {
+                exp.Visit(code);
+            }
+            //参数数量
+            code.Add(new Instruction(OpCode.Push) { OpVar = funArgs.Count });
+
+            code.Add(new Instruction(OpCode.CoYield));
+        }
+        else if (prim.primType == PrimExpType.CoResume)
+        {
+            //参数压栈
+            foreach (var exp in funArgs)
+            {
+                exp.Visit(code);
+            }
+            //参数数量
+            code.Add(new Instruction(OpCode.Push) { OpVar = funArgs.Count-1 });
+
+            code.Add(new Instruction(OpCode.CoResume));
+        }
+        else
+        {
+            OnVisit(code);
+            var _next = next;
+            while (_next != null)
+            {
+                _next.Visit(code);
+                _next = _next.next;
+            }
+        }
     }
 
     void OnVisit(List<Instruction> code)
@@ -908,7 +980,7 @@ class PostfixExp : IExp
             //参数数量
             code.Add(new Instruction(OpCode.Push) { OpVar = funArgs.Count });
             //返回地址
-            code.Add(new Instruction(OpCode.Push) { OpVar = code.Count +2});
+            code.Add(new Instruction(OpCode.Push) { OpVar = code.Count + 2 });
             //调用就是跳转
             code.Add(new Instruction(OpCode.Call));
         }
@@ -920,7 +992,7 @@ class PostfixExp : IExp
         }
         else if (postfixType == PostfixType.Point)//object
         {
-            code.Add(new Instruction(OpCode.Dot) { OpStr=dotToken.desc});
+            code.Add(new Instruction(OpCode.Dot) { OpStr = dotToken.desc });
         }
 
     }
@@ -1386,7 +1458,9 @@ enum PrimExpType
     Boolean,
     Exp,
     Array,
-    Object
+    Object,
+    CoYield,
+    CoResume
 }
 class PrimExp : IExp
 {
@@ -1428,10 +1502,24 @@ class PrimExp : IExp
             token = t;
             return true;
         }
-        else if (t.tokenType == TokenType.TTLeftBracket)
+        else if (t.tokenType == TokenType.TTCoYield)
+        {
+            reader.Next();
+            primType = PrimExpType.CoYield;
+            token = t;
+            return true;
+        }
+        else if (t.tokenType == TokenType.TTCoResume)
+        {
+            reader.Next();
+            primType = PrimExpType.CoResume;
+            token = t;
+            return true;
+        }
+        else if (t.tokenType == TokenType.TTLeftBracket1)
         {
             primType = PrimExpType.Exp;
-            List<Token> ts = reader.SeekMatchBracket(TokenType.TTLeftBracket, TokenType.TTRightBracket);
+            List<Token> ts = reader.SeekMatchBracket(TokenType.TTLeftBracket1, TokenType.TTRightBracket1);
             exp = new Exp();
             return exp.Parse(ts);
         }
@@ -1460,7 +1548,7 @@ class PrimExp : IExp
         {
             return exp.GetExpType();
         }
-            
+
         return ExpType.ETPrim;
     }
 
@@ -1480,7 +1568,7 @@ class PrimExp : IExp
         }
         else if (primType == PrimExpType.ID)
         {
-            var v = Env.LocalScope.GetVariant(token.desc);
+            var v = Executor.LocalScope.GetVariant(token.desc);
             if (v != null)
             {
                 return v;
@@ -1538,9 +1626,10 @@ class PrimExp : IExp
         {
             obj.Visit(code);
         }
+
         else
         {
-            throw new Exception("invalid prim type!");
+            //throw new Exception("invalid prim type!");
         }
 
     }
@@ -1695,7 +1784,7 @@ class ObjectExp : IExp
             code.Add(new Instruction(OpCode.Push) { OpVar = kv.Key });
             kv.Value.Visit(code);
         }
-        code.Add(new Instruction(OpCode.NewObj) { OpInt=kvs.Count});
+        code.Add(new Instruction(OpCode.NewObj) { OpInt = kvs.Count });
     }
 }
 

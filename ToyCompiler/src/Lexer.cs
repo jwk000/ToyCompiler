@@ -15,8 +15,8 @@ namespace ToyCompiler
         TTMultiple, // *
         TTDivision, // /
         TTMold,// %
-        TTLeftBracket, // (
-        TTRightBracket, // )
+        TTLeftBracket1, // (
+        TTRightBracket1, // )
         TTLessThan, // <
         TTLessEqual, // <=
         TTGreatThan, // >
@@ -67,6 +67,9 @@ namespace ToyCompiler
         TTVar, // var
         TTDot, // .
         TTIn, // in
+        TTCoroutine,//coroutine
+        TTCoYield,//coyield
+        TTCoResume,//coresume
     }
 
     enum TokenState
@@ -437,7 +440,8 @@ namespace ToyCompiler
                                 i++;
                                 tk = new Token { tokenType = TokenType.TTIf, desc = "if" };
                             }
-                        }else if(d == 'n')
+                        }
+                        else if (d == 'n')
                         {
                             if (i + 2 < exp.Length && !char.IsLetterOrDigit(exp[i + 2]))
                             {
@@ -536,7 +540,7 @@ namespace ToyCompiler
                                 }
                             }
                         }
-                        else  if (i + 1 < exp.Length && exp[i + 1] == 'u')
+                        else if (i + 1 < exp.Length && exp[i + 1] == 'u')
                         {
                             if (i + 2 < exp.Length && exp[i + 2] == 'n')
                             {
@@ -563,7 +567,7 @@ namespace ToyCompiler
                                 }
                             }
                         }
-                        
+
                         if (match)
                         {
                             mTokenList.Add(tk);
@@ -664,7 +668,6 @@ namespace ToyCompiler
                                                 {
                                                     if (i + 8 < exp.Length && !char.IsLetterOrDigit(exp[i + 8]))
                                                     {
-
                                                         match = true;
                                                         i += 7;
                                                         tk = new Token { tokenType = TokenType.TTContinue, desc = "continue" };
@@ -675,6 +678,77 @@ namespace ToyCompiler
                                     }
                                 }
                             }
+                            else if (i + 2 < exp.Length && exp[i + 2] == 'r')
+                            {
+                                if (i + 3 < exp.Length && exp[i + 3] == 'o')
+                                {
+                                    if (i + 4 < exp.Length && exp[i + 4] == 'u')
+                                    {
+                                        if (i + 5 < exp.Length && exp[i + 5] == 't')
+                                        {
+                                            if (i + 6 < exp.Length && exp[i + 6] == 'i')
+                                            {
+                                                if (i + 7 < exp.Length && exp[i + 7] == 'n')
+                                                {
+                                                    if (i + 8 < exp.Length && exp[i + 8] == 'e')
+                                                    {
+                                                        if (i + 9 < exp.Length && !char.IsLetterOrDigit(exp[i + 9]))
+                                                        {
+                                                            match = true;
+                                                            i += 8;
+                                                            tk = new Token { tokenType = TokenType.TTCoroutine, desc = "coroutine" };
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                if (i + 3 < exp.Length && exp[i + 3] == 'e')
+                                {
+                                    if (i + 4 < exp.Length && exp[i + 4] == 's')
+                                    {
+                                        if (i + 5 < exp.Length && exp[i + 5] == 'u')
+                                        {
+                                            if (i + 6 < exp.Length && exp[i + 6] == 'm')
+                                            {
+                                                if (i + 7 < exp.Length && exp[i + 7] == 'e')
+                                                {
+                                                    if (i + 8 < exp.Length && !char.IsLetterOrDigit(exp[i + 8]))
+                                                    {
+                                                        match = true;
+                                                        i += 7;
+                                                        tk = new Token { tokenType = TokenType.TTCoResume, desc = "coresume" };
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else if (i + 2 < exp.Length && exp[i + 2] == 'y')
+                            {
+                                if (i + 3 < exp.Length && exp[i + 3] == 'i')
+                                {
+                                    if (i + 4 < exp.Length && exp[i + 4] == 'e')
+                                    {
+                                        if (i + 5 < exp.Length && exp[i + 5] == 'l')
+                                        {
+                                            if (i + 6 < exp.Length && exp[i + 6] == 'd')
+                                            {
+                                                if (i + 7 < exp.Length && !char.IsLetterOrDigit(exp[i + 7]))
+                                                {
+                                                    match = true;
+                                                    i += 6;
+                                                    tk = new Token { tokenType = TokenType.TTCoYield, desc = "coyield" };
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+
                         }
                         if (match)
                         {
@@ -764,13 +838,13 @@ namespace ToyCompiler
                         {
                             if (i + 2 < exp.Length && exp[i + 2] == 'r')
                             {
-                                
-                                    if (i + 3 < exp.Length && !char.IsLetterOrDigit(exp[i + 3]))
-                                    {
-                                        match = true;
-                                        i += 2;
-                                        tk = new Token { tokenType = TokenType.TTVar, desc = "var" };
-                                    }
+
+                                if (i + 3 < exp.Length && !char.IsLetterOrDigit(exp[i + 3]))
+                                {
+                                    match = true;
+                                    i += 2;
+                                    tk = new Token { tokenType = TokenType.TTVar, desc = "var" };
+                                }
                             }
                         }
                         if (match)
@@ -797,8 +871,8 @@ namespace ToyCompiler
                     {
                         tk = c switch
                         {
-                            '(' => new Token { tokenType = TokenType.TTLeftBracket, desc = c.ToString() },
-                            ')' => new Token { tokenType = TokenType.TTRightBracket, desc = c.ToString() },
+                            '(' => new Token { tokenType = TokenType.TTLeftBracket1, desc = c.ToString() },
+                            ')' => new Token { tokenType = TokenType.TTRightBracket1, desc = c.ToString() },
                             '[' => new Token { tokenType = TokenType.TTLeftBracket2, desc = c.ToString() },
                             ']' => new Token { tokenType = TokenType.TTRightBracket2, desc = c.ToString() },
                             '{' => new Token { tokenType = TokenType.TTLeftBracket3, desc = c.ToString() },
@@ -807,7 +881,7 @@ namespace ToyCompiler
                             ';' => new Token { tokenType = TokenType.TTSimicolon, desc = c.ToString() },
                             ',' => new Token { tokenType = TokenType.TTComma, desc = c.ToString() },
                             '?' => new Token { tokenType = TokenType.TTQuestion, desc = c.ToString() },
-                            '.' => new Token { tokenType = TokenType.TTDot, desc = c.ToString()},
+                            '.' => new Token { tokenType = TokenType.TTDot, desc = c.ToString() },
                             _ => null
                         };
 
@@ -822,9 +896,9 @@ namespace ToyCompiler
                 }
             }
             if (st == TokenState.Comment) { st = TokenState.None; }
-            if (st != TokenState.None )
+            if (st != TokenState.None)
             {
-                Console.WriteLine("invalid end! token state={0}",st);
+                Console.WriteLine("invalid end! token state={0}", st);
                 return false;
             }
             return true;

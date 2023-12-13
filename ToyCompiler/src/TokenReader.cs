@@ -10,7 +10,7 @@ namespace ToyCompiler
     {
         List<Token> mTokens;
         int mReadIndex = 0;
-        int mSearchIndex = 0;
+        
         public TokenReader(List<Token> tokens)
         {
             mTokens = tokens;

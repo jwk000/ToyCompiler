@@ -6,7 +6,7 @@ using static System.Formats.Asn1.AsnWriter;
 namespace ToyCompiler;
 
 /*
- * stat =  exp_stat | compound_stat | if_stat | while_stat | for_stat | jump_stat | fun_stat
+ * stat =  exp_stat | compound_stat | if_stat | while_stat | for_stat | jump_stat | fun_stat|co_stat
  * exp_stat : exp ';' | ';'
  * compound_stat = '{' stat* '}'
  * if_stat = 'if' '(' exp ')' stat ('else' stat )?
@@ -14,7 +14,7 @@ namespace ToyCompiler;
  * for_stat = 'for' '(' exp? ';' exp? ';' exp? ')' stat | 'for' '(' exp 'in' exp ')' stat
  * jump_stat = 'break' ';'|'continue' ';' |'return' exp? ';'
  * fun_stat = 'function' ID '(' args ')' '{' stat* '}'
- * 
+ * co_stat = 'coroutine' ID '(' args ')' '{' stat* '}'
  */
 
 enum StatType
@@ -25,7 +25,8 @@ enum StatType
     StatExp,
     StatCompound,
     StatJump,
-    StatFun
+    StatFun,
+    StatCo,
 }
 
 enum StatCtrl
@@ -67,7 +68,7 @@ class StatTree : IStat
 
     public StatCtrl Exec(Scope scope)
     {
-        Env.LocalScope = scope;
+        Executor.LocalScope = scope;
         foreach (var stat in mStatList)
         {
             StatCtrl ctrl = stat.Exec(scope);
@@ -100,6 +101,7 @@ class Stat : IStat
     public ForStat mForStat;
     public JumpStat mJumpStat;
     public FunStat mFunStat;
+    public CoStat mCoStat;
 
     public bool Parse(TokenReader tokenReader)
     {
@@ -141,6 +143,12 @@ class Stat : IStat
             mFunStat = new FunStat();
             return mFunStat.Parse(tokenReader);
         }
+        else if(t.tokenType == TokenType.TTCoroutine)
+        {
+            mStatType = StatType.StatCo;
+            mCoStat = new CoStat();
+            return mCoStat.Parse(tokenReader);
+        }
         else
         {
             mStatType = StatType.StatExp;
@@ -167,6 +175,8 @@ class Stat : IStat
                 return mJumpStat.Exec(scope);
             case StatType.StatFun:
                 return mFunStat.Exec(scope);
+            case StatType.StatCo:
+                return mCoStat.Exec(scope);
             default:
                 break;
         }
@@ -191,6 +201,8 @@ class Stat : IStat
                 mJumpStat.Visit(code); break;
             case StatType.StatFun:
                 mFunStat.Visit(code); break;
+            case StatType.StatCo:
+                mCoStat.Visit(code);break;
             default:
                 break;
         }
@@ -273,17 +285,17 @@ class CompoundStat : IStat
     {
         Scope mScope = new Scope();
         mScope.SetUpScope(scope);
-        Env.LocalScope = mScope;
+        Executor.LocalScope = mScope;
         foreach (var stat in mStatList)
         {
             StatCtrl ctrl = stat.Exec(mScope);
             if (ctrl != StatCtrl.None)
             {
-                Env.LocalScope = scope;
+                Executor.LocalScope = scope;
                 return ctrl;
             }
         }
-        Env.LocalScope = scope;
+        Executor.LocalScope = scope;
         return StatCtrl.None;
     }
 
@@ -317,11 +329,11 @@ class IfStat : IStat
             return false;
         }
         t = tokenReader.Peek();
-        if (t.tokenType != TokenType.TTLeftBracket)
+        if (t.tokenType != TokenType.TTLeftBracket1)
         {
             return false;
         }
-        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket, TokenType.TTRightBracket);
+        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket1, TokenType.TTRightBracket1);
         if (expTokens == null)
         {
             return false;
@@ -424,11 +436,11 @@ class ForStat : IStat
         t = tokenReader.Peek();
 
         // ()
-        if (t.tokenType != TokenType.TTLeftBracket)
+        if (t.tokenType != TokenType.TTLeftBracket1)
         {
             return false;
         }
-        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket, TokenType.TTRightBracket);
+        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket1, TokenType.TTRightBracket1);
         expReader = new TokenReader(expTokens);
         if (expReader.ContainsToken(TokenType.TTIn))
         {
@@ -490,7 +502,7 @@ class ForStat : IStat
     {
         Scope mScope = new Scope();
         mScope.SetUpScope(scope);
-        Env.LocalScope = mScope;
+        Executor.LocalScope = mScope;
         if (mForStatType == ForStatType.LoopFor)
         {
             for (mExp1?.Calc(); mExp2 == null ? true : mExp2.Calc() == true; mExp3?.Calc())
@@ -499,7 +511,7 @@ class ForStat : IStat
                 if (ctrl == StatCtrl.Return)
                 {
                     mScope.Clear();
-                    Env.LocalScope = scope;
+                    Executor.LocalScope = scope;
                     return StatCtrl.Return;
                 }
                 else if (ctrl == StatCtrl.Break)
@@ -521,7 +533,7 @@ class ForStat : IStat
                 if (ctrl == StatCtrl.Return)
                 {
                     mScope.Clear();
-                    Env.LocalScope = scope;
+                    Executor.LocalScope = scope;
                     return StatCtrl.Return;
                 }
                 else if (ctrl == StatCtrl.Break)
@@ -536,7 +548,7 @@ class ForStat : IStat
 
         }
         mScope.Clear();
-        Env.LocalScope = scope;
+        Executor.LocalScope = scope;
         return StatCtrl.None;
     }
     public void Visit(List<Instruction> code)
@@ -639,12 +651,12 @@ class WhileStat : IStat
         }
         t = tokenReader.Peek();
 
-        if (t.tokenType != TokenType.TTLeftBracket)
+        if (t.tokenType != TokenType.TTLeftBracket1)
         {
             return false;
         }
 
-        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket, TokenType.TTRightBracket);
+        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket1, TokenType.TTRightBracket1);
         if (expTokens.Count == 0)
         {
             return false;
@@ -741,7 +753,7 @@ class JumpStat : IStat
         else if (mToken.tokenType == TokenType.TTReturn)
         {
             var v = mRetExp.Calc();
-            Env.RunStack.Add(v);//TODO 多返回值就压多个
+            Executor.RunStack.Add(v);//TODO 多返回值就压多个
             return StatCtrl.Return;
         }
         else
@@ -782,7 +794,6 @@ class FunStat : IStat
     public Token mFunID;
     public List<Token> mParams;//形参
     public CompoundStat mStat;
-
     public bool Parse(TokenReader tokenReader)
     {
         var t = tokenReader.Next();
@@ -801,12 +812,12 @@ class FunStat : IStat
 
         t = tokenReader.Peek();
 
-        if (t.tokenType != TokenType.TTLeftBracket)
+        if (t.tokenType != TokenType.TTLeftBracket1)
         {
             return false;
         }
 
-        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket, TokenType.TTRightBracket);
+        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket1, TokenType.TTRightBracket1);
         if (expTokens.Count > 0)
         {
             mParams = new List<Token>();
@@ -844,23 +855,23 @@ class FunStat : IStat
         //函数不应该访问上层作用域，实现闭包则copy一份
         //可以访问全局作用域
         Scope mScope = new Scope();
-        mScope.SetUpScope(Env.GlobalScope);
-        Env.LocalScope = mScope;
+        mScope.SetUpScope(Executor.GlobalScope);
+        Executor.LocalScope = mScope;
         for (int i = 0; i < mParams.Count; i++)
         {
-            if (i >= Env.RunStack.Count)
+            if (i >= Executor.RunStack.Count)
             {
                 break;
             }
             Token t = mParams[i];
-            Variant v = Env.RunStack[i];
+            Variant v = Executor.RunStack[i];
             Variant l = new Variant();
             l.Assign(v);
             l.id = t.desc;
             mScope.SetVariant(l);
         }
         //清理参数
-        Env.RunStack.Clear();
+        Executor.RunStack.Clear();
         if (mInnerBuild)
         {
             mInnerAction.Invoke();
@@ -870,7 +881,7 @@ class FunStat : IStat
             mStat.Exec(mScope);
         }
         mScope.Clear();
-        Env.LocalScope = scope;//返回上层作用域
+        Executor.LocalScope = scope;//返回上层作用域
     }
 
     public StatCtrl Exec(Scope scope)
@@ -894,7 +905,6 @@ class FunStat : IStat
         Instruction jump = new Instruction(OpCode.Jump);//函数只能被调用，自己不执行
         code.Add(jump);
         v.label = code.Count;
-
         if (mInnerBuild)
         {
             mInnerVisit.Invoke(code);
@@ -906,6 +916,93 @@ class FunStat : IStat
         //返回值在栈顶，return语句清栈后写入返回值
         //手动return一下
         code.Add(new Instruction(OpCode.Ret));
+        jump.OpInt = code.Count;
+    }
+
+
+}
+
+class CoStat : IStat
+{
+    public Token mCoID;
+    public List<Token> mParams;//形参
+    public CompoundStat mStat;
+
+    public bool Parse(TokenReader tokenReader)
+    {
+        var t = tokenReader.Next();
+
+        if (t.tokenType != TokenType.TTCoroutine)
+        {
+            return false;
+        }
+
+        t = tokenReader.Next();
+        if (t.tokenType != TokenType.TTID)
+        {
+            return false;
+        }
+        mCoID = t;
+
+        t = tokenReader.Peek();
+
+        if (t.tokenType != TokenType.TTLeftBracket1)
+        {
+            return false;
+        }
+
+        var expTokens = tokenReader.SeekMatchBracket(TokenType.TTLeftBracket1, TokenType.TTRightBracket1);
+        if (expTokens.Count > 0)
+        {
+            mParams = new List<Token>();
+            TokenReader tr = new TokenReader(expTokens);
+            t = tr.Next();
+            while (t != null)
+            {
+                mParams.Add(t);
+                t = tr.Next();
+                if (t != null)
+                {
+                    if (t.tokenType != TokenType.TTComma)
+                    {
+                        return false;
+                    }
+                    t = tr.Next();
+                }
+            }
+        }
+
+        mStat = new CompoundStat();
+        bool ret = mStat.Parse(tokenReader);
+        return ret;
+    }
+
+    public StatCtrl Exec(Scope scope) { return StatCtrl.None; }
+
+    public void Visit(List<Instruction> code)
+    {
+        var v = new Variant();
+        v.variantType = VariantType.Coroutine;
+        v.id = mCoID.desc;
+        Coroutine co = new Coroutine();
+        co.ctx.ID = VM.CtxID++;
+        co.ctx.Co = co;
+        co.ctx.Code = code;
+        co.mParams = mParams;
+        v.co = co;
+
+        code.Add(new Instruction(OpCode.Push) { OpVar = v });
+        code.Add(new Instruction(OpCode.Store));//栈空了
+        Instruction jump = new Instruction(OpCode.Jump);//函数只能被调用，自己不执行
+        code.Add(jump);
+        v.label = code.Count;
+        co.ctx.IP = v.label;
+        co.label = v.label;
+        mStat.Visit(code);
+
+        code.Add(new Instruction(OpCode.Push) { OpVar = 0 });
+        code.Add(new Instruction(OpCode.CoYield));
+
         jump.OpInt = code.Count;
     }
 
