@@ -12,7 +12,30 @@
 > tc -i 交互模式(开发中)
 > tc -t testcase 运行测试用例
 ```
+## 2023-12-13 更新
+- 实现了协程，重构了虚拟机执行代码；
 
+协程关键字 coroutine 创建协程， coresume(co,args...)切换协程 coyield(args...) 切换主协程
+
+```js
+//生产者-消费者
+coroutine productor() {
+    var i = 0;
+    while (true) {
+        coyield(i++);
+    }
+}
+
+function consumer() {
+    var j = 0;
+    while (true) {
+        j = coresume(productor);
+        print(j);
+    }
+}
+consumer();
+
+```
 ## 2023-12-5 更新
 
 - 调整代码结构，vm作为核心类处理所有操作，vm负责词法分析、生成语法树、编译字节码、执行字节码、与csharp互操作；
